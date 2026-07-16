@@ -1,0 +1,30 @@
+# -- Secrets: real topology, keys, passwords are NEVER committed --
+secrets/*
+!secrets/README.md
+!secrets/*.example.md
+
+# -- Python --
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+
+# -- Ansible --
+*.retry
+.vault_pass
+vault-password.txt
+
+# -- Editor / OS --
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# -- Local build artifacts --
+*.log
+heatmap/navigator_layer.json
