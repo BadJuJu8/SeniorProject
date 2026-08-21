@@ -1,0 +1,129 @@
+# Detection-as-Code pipeline — the project's centrepiece.
+#
+# On every push that touches a rule, sample, or CI script, this fails the build
+# unless the detection provably fires: first as a deterministic /logtest unit test,
+# then — for real — by firing the live Atomic Red Team technique and confirming the
+# alert landed in the Wazuh indexer. Only then is the rule deployed and the ATT&CK
+# heatmap regenerated.
+#
+# Runner topology (see docs/PLAN.md):
+#   label `linux`   -> host-mode Act runner on the Gitea LXC (has python, ansible, S2AN)
+#   label `windows` -> Act runner ON the Windows target (fires atomics locally, no remoting)
+#
+# Required Gitea repo config (Settings -> Actions -> Secrets / Variables):
+#   secrets: WAZUH_API_PASSWORD, WAZUH_INDEXER_PASSWORD, ANSIBLE_INVENTORY, ANSIBLE_VAULT_PASS
+#   vars:    WAZUH_MANAGER_URL, WAZUH_API_USER, WAZUH_INDEXER_URL, WAZUH_INDEXER_USER
+name: detection-as-code
+
+on:
+  push:
+    paths:
+      - "rules/**"
+      - "ci/**"
+      - "tests/**"
+      - ".gitea/workflows/detect.yml"
+  workflow_dispatch:
+    inputs:
+      technique:
+        description: "Manifest technique key to attack/verify"
+        default: "kerberoasting"
+        required: true
+
+env:
+  # workflow_dispatch supplies inputs.technique; push events fall back to kerberoasting
+  # (the green baseline that must never regress).
+  TECH: ${{ github.event.inputs.technique || 'kerberoasting' }}
+  WAZUH_MANAGER_URL: ${{ vars.WAZUH_MANAGER_URL }}
+  WAZUH_API_USER: ${{ vars.WAZUH_API_USER }}
+  WAZUH_API_PASSWORD: ${{ secrets.WAZUH_API_PASSWORD }}
+  WAZUH_INDEXER_URL: ${{ vars.WAZUH_INDEXER_URL }}
+  WAZUH_INDEXER_USER: ${{ vars.WAZUH_INDEXER_USER }}
+  WAZUH_INDEXER_PASSWORD: ${{ secrets.WAZUH_INDEXER_PASSWORD }}
+  WAZUH_VERIFY_TLS: "false"
+
+jobs:
+  # ---------------------------------------------------------------- #
+  # 1. Static gate — lint Sigma + offline tests. Needs no lab.       #
+  # ---------------------------------------------------------------- #
+  validate:
+    runs-on: linux
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ci/requirements.txt
+          pip install sigma-cli pysigma-validators-sigmahq
+      - name: Lint Sigma rules (sigma check)
+        run: sigma check rules/sigma/
+      - name: Offline tests (rules match samples, reductions hold)
+        run: pytest ci/test_offline.py -v
+
+  # ---------------------------------------------------------------- #
+  # 2 + 3 + 4. Two-tier detection test against the live lab.         #
+  #    unit (/logtest) -> fire atomic -> integration (_search)       #
+  # ---------------------------------------------------------------- #
+  detect:
+    needs: validate
+    runs-on: windows
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tooling
+        shell: pwsh
+        run: python -m pip install -r ci/requirements.txt
+
+      - name: Unit test — /logtest asserts the rule matches a sample event
+        shell: pwsh
+        run: python ci/logtest_unit.py --technique $env:TECH
+
+      - name: Fire the live atomic on this Windows target
+        shell: pwsh
+        run: ./ci/fire_atomic.ps1 -Technique $env:TECH -GetPrereqs -Cleanup -StartTimeFile "$env:GITHUB_WORKSPACE/atomic_start.txt"
+
+      - name: Integration test — confirm the alert reached the indexer
+        shell: pwsh
+        run: |
+          $start = (Get-Content "$env:GITHUB_WORKSPACE/atomic_start.txt").Trim()
+          python ci/confirm_alert.py --technique $env:TECH --since $start --timeout 240
+
+  # ---------------------------------------------------------------- #
+  # 5. Deploy the verified rule to the manager (Ansible).            #
+  # ---------------------------------------------------------------- #
+  deploy:
+    needs: detect
+    runs-on: linux
+    steps:
+      - uses: actions/checkout@v4
+      - name: Materialize inventory + vault password from secrets
+        run: |
+          printf '%s' "${{ secrets.ANSIBLE_INVENTORY }}" > ansible/inventory.ini
+          printf '%s' "${{ secrets.ANSIBLE_VAULT_PASS }}" > ansible/.vault_pass
+          chmod 600 ansible/.vault_pass
+      - name: Deploy local_rules.xml + reload the manager
+        run: |
+          ansible-playbook -i ansible/inventory.ini \
+            --vault-password-file ansible/.vault_pass \
+            ansible/deploy-rule.yml
+      - name: Post-deploy sanity — /logtest still matches on the live rule
+        run: |
+          pip install -r ci/requirements.txt
+          python ci/logtest_unit.py --technique "$TECH"
+      - name: Scrub secrets
+        if: always()
+        run: rm -f ansible/.vault_pass ansible/inventory.ini
+
+  # ---------------------------------------------------------------- #
+  # 6. Regenerate the ATT&CK coverage heatmap.                       #
+  # ---------------------------------------------------------------- #
+  heatmap:
+    needs: deploy
+    runs-on: linux
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate ATT&CK Navigator layer
+        run: bash heatmap/gen_layer.sh
+      - name: Publish the layer as a build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: attack-navigator-layer
+          path: heatmap/navigator_layer.json

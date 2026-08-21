@@ -1,0 +1,35 @@
+title: Pass-the-Hash Logon via Overpass/Sekurlsa (LogonType 9 + seclogo)
+id: b3afb36e-decb-478e-9f90-ad329c75d3d3
+status: test
+description: |
+    Detects the local NewCredentials logon that Mimikatz sekurlsa::pth (and similar
+    overpass-the-hash tooling) produces. The technique starts a process with the
+    identity of the current user but injects an attacker-supplied NTLM hash to be
+    used for outbound authentication. Locally this surfaces as Event ID 4624 with
+    LogonType 9 (NewCredentials), the seclogo (Secondary Logon) logon process, and
+    the Negotiate authentication package — a combination that runas /netonly does
+    not normally produce together with an NTLM-only outbound leg.
+references:
+    - https://attack.mitre.org/techniques/T1550/002/
+    - https://github.com/redcanaryco/atomic-red-team/blob/master/atomics/T1550.002/T1550.002.md
+    - https://blog.netwrix.com/2021/11/30/how-to-detect-pass-the-hash-attacks/
+author: Robert Garcia
+date: 2026-07-19
+tags:
+    - attack.lateral_movement
+    - attack.t1550.002
+logsource:
+    product: windows
+    service: security
+    definition: 'Requires "Audit Logon" success auditing (Event ID 4624) on workstations and servers.'
+detection:
+    selection:
+        EventID: 4624
+        LogonType: 9                       # NewCredentials
+        LogonProcessName: 'seclogo'         # Secondary Logon service
+        AuthenticationPackageName: 'Negotiate'
+    condition: selection
+falsepositives:
+    - Administrators legitimately using runas /netonly with alternate credentials (baseline the source hosts and operators).
+    - Some backup, monitoring, or deployment agents that impersonate credentials for outbound auth.
+level: high

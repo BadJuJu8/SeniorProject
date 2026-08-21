@@ -1,0 +1,120 @@
+<!--
+  local_rules.xml  —  hand-authored Wazuh manager rules (analysisd)
+
+  Deployed to /var/ossec/etc/rules/local_rules.xml by ansible/deploy-rule.yml.
+  Each rule below is the runtime counterpart of a portable Sigma rule in
+  ../sigma/ (there is no reliable Sigma->Wazuh converter — see docs/PLAN.md).
+
+  Conventions:
+  * Custom rule IDs live in the 100000+ user range (0-99999 is reserved by Wazuh).
+  * Every technique gets a level-0 "sighting" parent (keyed on the event ID) plus a
+    level-12 alerting child. The parent keeps /logtest output readable and lets the
+    child chain with <if_sid>.
+  * Parents anchor on <decoded_as>windows_eventchannel</decoded_as> so /logtest is
+    deterministic regardless of which Wazuh version's base ruleset is installed.
+  * Field matches use PCRE2 with anchors; reductions use negate="yes" (all negated
+    fields must hold, i.e. logical NOT of their OR — matching the Sigma "reduction").
+
+  Traceability: ../../traceability.md maps Sigma id <-> rule.id <-> ATT&CK <-> atomic.
+-->
+<group name="windows,active_directory,detection_as_code,">
+
+  <!-- ============================================================= -->
+  <!-- Kerberoasting  —  T1558.003  —  sigma: kerberoasting.yml       -->
+  <!-- Windows Security 4769: a Kerberos service ticket was requested -->
+  <!-- ============================================================= -->
+  <rule id="100200" level="0">
+    <decoded_as>windows_eventchannel</decoded_as>
+    <field name="win.system.eventID">^4769$</field>
+    <description>Kerberos service ticket (TGS) requested [4769]</description>
+    <options>no_full_log</options>
+  </rule>
+
+  <rule id="100201" level="12">
+    <if_sid>100200</if_sid>
+    <field name="win.eventdata.ticketEncryptionType" type="pcre2">^0x17$</field>
+    <field name="win.eventdata.ticketOptions" type="pcre2">^0x40810000$</field>
+    <!-- reduction: drop machine-account SPNs, krbtgt, and machine requestors -->
+    <field name="win.eventdata.serviceName" negate="yes" type="pcre2">\$$</field>
+    <field name="win.eventdata.serviceName" negate="yes" type="pcre2">(?i)^krbtgt$</field>
+    <field name="win.eventdata.targetUserName" negate="yes" type="pcre2">\$$</field>
+    <description>Kerberoasting: RC4-HMAC service ticket requested for SPN $(win.eventdata.serviceName) by $(win.eventdata.targetUserName)</description>
+    <mitre>
+      <id>T1558.003</id>
+    </mitre>
+    <group>credential_access,kerberoasting,pci_dss_10.6.1,gdpr_IV_35.7.d,</group>
+  </rule>
+
+  <!-- ============================================================= -->
+  <!-- AS-REP Roasting  —  T1558.004  —  sigma: asrep_roasting.yml    -->
+  <!-- Windows Security 4768: a Kerberos TGT (AS-REQ) was requested   -->
+  <!-- ============================================================= -->
+  <rule id="100210" level="0">
+    <decoded_as>windows_eventchannel</decoded_as>
+    <field name="win.system.eventID">^4768$</field>
+    <description>Kerberos authentication ticket (TGT) requested [4768]</description>
+    <options>no_full_log</options>
+  </rule>
+
+  <rule id="100211" level="12">
+    <if_sid>100210</if_sid>
+    <field name="win.eventdata.preAuthType" type="pcre2">^0$</field>
+    <field name="win.eventdata.ticketEncryptionType" type="pcre2">^0x17$</field>
+    <field name="win.eventdata.targetUserName" negate="yes" type="pcre2">(?i)^krbtgt$</field>
+    <description>AS-REP Roasting: pre-auth-disabled account $(win.eventdata.targetUserName) issued an RC4-HMAC TGT</description>
+    <mitre>
+      <id>T1558.004</id>
+    </mitre>
+    <group>credential_access,asrep_roasting,pci_dss_10.6.1,gdpr_IV_35.7.d,</group>
+  </rule>
+
+  <!-- ============================================================= -->
+  <!-- DCSync  —  T1003.006  —  sigma: dcsync.yml                     -->
+  <!-- Windows Security 4662: replication rights exercised by a       -->
+  <!-- non-machine account                                           -->
+  <!-- ============================================================= -->
+  <rule id="100220" level="0">
+    <decoded_as>windows_eventchannel</decoded_as>
+    <field name="win.system.eventID">^4662$</field>
+    <description>Directory-service object operation [4662]</description>
+    <options>no_full_log</options>
+  </rule>
+
+  <rule id="100221" level="12">
+    <if_sid>100220</if_sid>
+    <!-- DS-Replication-Get-Changes / -All / -In-Filtered-Set -->
+    <field name="win.eventdata.properties" type="pcre2">1131f6aa-9c07-11d1-f79f-00c04fc2dcd2|1131f6ad-9c07-11d1-f79f-00c04fc2dcd2|89e95b76-444d-4c62-991a-0facbeda640c</field>
+    <field name="win.eventdata.subjectUserName" negate="yes" type="pcre2">\$$</field>
+    <field name="win.eventdata.subjectUserName" negate="yes" type="pcre2">(?i)^MSOL_</field>
+    <description>DCSync: AD replication rights exercised by non-DC account $(win.eventdata.subjectUserName)</description>
+    <mitre>
+      <id>T1003.006</id>
+    </mitre>
+    <group>credential_access,dcsync,pci_dss_10.6.1,gdpr_IV_35.7.d,</group>
+  </rule>
+
+  <!-- ============================================================= -->
+  <!-- Pass-the-Hash  —  T1550.002  —  sigma: pass_the_hash.yml       -->
+  <!-- Windows Security 4624: NewCredentials (type 9) logon via the   -->
+  <!-- Secondary Logon service — the sekurlsa::pth signature          -->
+  <!-- ============================================================= -->
+  <rule id="100230" level="0">
+    <decoded_as>windows_eventchannel</decoded_as>
+    <field name="win.system.eventID">^4624$</field>
+    <description>An account was successfully logged on [4624]</description>
+    <options>no_full_log</options>
+  </rule>
+
+  <rule id="100231" level="12">
+    <if_sid>100230</if_sid>
+    <field name="win.eventdata.logonType" type="pcre2">^9$</field>
+    <field name="win.eventdata.logonProcessName" type="pcre2">(?i)^seclogo$</field>
+    <field name="win.eventdata.authenticationPackageName" type="pcre2">(?i)^Negotiate$</field>
+    <description>Pass-the-Hash: NewCredentials logon (type 9) via Secondary Logon for $(win.eventdata.targetUserName)</description>
+    <mitre>
+      <id>T1550.002</id>
+    </mitre>
+    <group>lateral_movement,pass_the_hash,pci_dss_10.6.1,gdpr_IV_35.7.d,</group>
+  </rule>
+
+</group>

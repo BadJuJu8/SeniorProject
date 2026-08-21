@@ -1,0 +1,36 @@
+{
+  "win": {
+    "system": {
+      "providerName": "Microsoft-Windows-Security-Auditing",
+      "providerGuid": "{54849625-5478-4994-a5ba-3e3b0328c30d}",
+      "eventID": "4662",
+      "version": "0",
+      "level": "0",
+      "task": "12804",
+      "opcode": "0",
+      "keywords": "0x8020000000000000",
+      "systemTime": "2026-07-19T18:26:52.412778100Z",
+      "eventRecordID": "1225044",
+      "processID": "612",
+      "threadID": "7208",
+      "channel": "Security",
+      "computer": "DC01.robslab.local",
+      "severityValue": "AUDIT_SUCCESS",
+      "message": "An operation was performed on an Active Directory object. Account Name: lowpriv  Object Type: domainDNS  Properties: Control Access {1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}  Access Mask: 0x100"
+    },
+    "eventdata": {
+      "subjectUserSid": "S-1-5-21-1004336348-1177238915-682003330-1183",
+      "subjectUserName": "lowpriv",
+      "subjectDomainName": "ROBSLAB.LOCAL",
+      "subjectLogonId": "0x9f4c21",
+      "objectServer": "DS",
+      "objectType": "%{19195a5b-6da0-11d0-afd3-00c04fd930c9}",
+      "objectName": "%{b31f0a55-1a2c-4d3a-9a1e-2c0b7f4d9e00}",
+      "operationType": "Object Access",
+      "handleId": "0x0",
+      "accessList": "%%7688",
+      "accessMask": "0x100",
+      "properties": "%%7688\n\t{1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}\n\t{19195a5b-6da0-11d0-afd3-00c04fd930c9}"
+    }
+  }
+}

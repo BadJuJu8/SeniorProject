@@ -1,0 +1,5 @@
+# CI / detection-as-code tooling dependencies.
+# Install into a venv:  python -m venv .venv && . .venv/bin/activate && pip install -r ci/requirements.txt
+requests>=2.31,<3
+PyYAML>=6.0
+pytest>=8.0

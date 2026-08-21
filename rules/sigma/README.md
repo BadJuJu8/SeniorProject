@@ -5,4 +5,6 @@ the source of any rule submitted upstream to SigmaHQ. Each rule here has a match
 in `../wazuh/` that actually runs in the SIEM (there is no reliable Sigma->Wazuh converter, so the
 mapping is authored by hand — see docs/PLAN.md).
 
-First rule: `kerberoasting.yml` (T1558.003).
+Rules: `kerberoasting.yml` (T1558.003), `asrep_roasting.yml` (T1558.004),
+`dcsync.yml` (T1003.006), `pass_the_hash.yml` (T1550.002). Lint with
+`sigma check rules/sigma/`.

@@ -1,0 +1,41 @@
+title: Active Directory Replication From Non-Machine Account (DCSync)
+id: e2c03308-c9ab-4df3-a64f-21c8704b752b
+status: test
+description: |
+    Detects a directory-service access (Event ID 4662) that exercises the AD
+    replication extended rights from an account that is not a domain controller
+    machine account — the signature of DCSync. Tools such as Mimikatz
+    (lsadump::dcsync) and Impacket secretsdump abuse the DS-Replication-Get-Changes
+    and DS-Replication-Get-Changes-All control-access rights to ask a DC to
+    replicate secrets (including the krbtgt hash) as if the caller were another DC.
+references:
+    - https://attack.mitre.org/techniques/T1003/006/
+    - https://github.com/redcanaryco/atomic-red-team/blob/master/atomics/T1003.006/T1003.006.md
+    - https://adsecurity.org/?p=1729
+author: Robert Garcia
+date: 2026-07-19
+tags:
+    - attack.credential_access
+    - attack.t1003.006
+logsource:
+    product: windows
+    service: security
+    definition: 'Requires a SACL auditing "Replicating Directory Changes" on the domain naming context, emitting Event ID 4662 with the replication GUIDs in Properties.'
+detection:
+    selection:
+        EventID: 4662
+        Properties|contains:
+            - '1131f6aa-9c07-11d1-f79f-00c04fc2dcd2'   # DS-Replication-Get-Changes
+            - '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2'   # DS-Replication-Get-Changes-All
+            - '89e95b76-444d-4c62-991a-0facbeda640c'   # DS-Replication-Get-Changes-In-Filtered-Set
+    filter_machine:
+        # Legitimate DC-to-DC replication is performed by machine accounts (name ends in $).
+        SubjectUserName|endswith: '$'
+    filter_msol:
+        # Azure AD Connect / MSOL sync accounts legitimately replicate; baseline and allow-list yours.
+        SubjectUserName|startswith: 'MSOL_'
+    condition: selection and not 1 of filter_*
+falsepositives:
+    - Domain controller computer accounts performing normal replication (filtered on the trailing "$").
+    - Azure AD Connect (MSOL_*) or other directory-sync service accounts — allow-list the specific account after verifying it.
+level: high

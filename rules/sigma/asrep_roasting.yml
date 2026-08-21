@@ -1,0 +1,34 @@
+title: AS-REP Roastable Kerberos AS-REQ (Kerberos Pre-Auth Disabled)
+id: fa836bef-997a-4a82-9562-ef67d7cf0c7c
+status: test
+description: |
+    Detects a Kerberos AS-REQ for an account that does not require pre-authentication,
+    answered with an RC4-HMAC encrypted TGT — the signature of AS-REP Roasting. When
+    "Do not require Kerberos preauthentication" is set on an account, any unauthenticated
+    attacker can request a TGT whose encrypted portion is derived from the account's
+    password hash, then crack it offline. PreAuthType 0 combined with the weak RC4-HMAC
+    cipher is the tell.
+references:
+    - https://attack.mitre.org/techniques/T1558/004/
+    - https://github.com/redcanaryco/atomic-red-team/blob/master/atomics/T1558.004/T1558.004.md
+    - https://www.harmj0y.net/blog/activedirectory/roasting-as-reps/
+author: Robert Garcia
+date: 2026-07-19
+tags:
+    - attack.credential_access
+    - attack.t1558.004
+logsource:
+    product: windows
+    service: security
+    definition: 'Requires the "Audit Kerberos Authentication Service" success SACL (Event ID 4768) on all domain controllers.'
+detection:
+    selection:
+        EventID: 4768
+        PreAuthType: '0'               # 0 = pre-authentication NOT required
+        TicketEncryptionType: '0x17'   # RC4-HMAC: crackable offline
+    filter:
+        TargetUserName: 'krbtgt'
+    condition: selection and not filter
+falsepositives:
+    - Accounts intentionally exempted from pre-authentication for legacy interoperability (these should themselves be treated as findings and remediated).
+level: high

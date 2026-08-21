@@ -1,0 +1,35 @@
+{
+  "win": {
+    "system": {
+      "providerName": "Microsoft-Windows-Security-Auditing",
+      "providerGuid": "{54849625-5478-4994-a5ba-3e3b0328c30d}",
+      "eventID": "4769",
+      "version": "0",
+      "level": "0",
+      "task": "14337",
+      "opcode": "0",
+      "keywords": "0x8020000000000000",
+      "systemTime": "2026-07-19T18:22:31.123456700Z",
+      "eventRecordID": "1224871",
+      "processID": "612",
+      "threadID": "7208",
+      "channel": "Security",
+      "computer": "DC01.robslab.local",
+      "severityValue": "AUDIT_SUCCESS",
+      "message": "A Kerberos service ticket was requested. Account Name: rgarcia  Service Name: svc_sql  Ticket Options: 0x40810000  Ticket Encryption Type: 0x17  Failure Code: 0x0"
+    },
+    "eventdata": {
+      "targetUserName": "rgarcia",
+      "targetDomainName": "ROBSLAB.LOCAL",
+      "serviceName": "svc_sql",
+      "serviceSid": "S-1-5-21-1004336348-1177238915-682003330-1147",
+      "ticketOptions": "0x40810000",
+      "ticketEncryptionType": "0x17",
+      "ipAddress": "::ffff:10.10.50.25",
+      "ipPort": "52111",
+      "status": "0x0",
+      "logonGuid": "{6b1f0a55-8f2c-4d3a-9a1e-2c0b7f4d9e11}",
+      "transmittedServices": "-"
+    }
+  }
+}

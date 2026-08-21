@@ -1,0 +1,37 @@
+{
+  "win": {
+    "system": {
+      "providerName": "Microsoft-Windows-Security-Auditing",
+      "providerGuid": "{54849625-5478-4994-a5ba-3e3b0328c30d}",
+      "eventID": "4768",
+      "version": "0",
+      "level": "0",
+      "task": "14339",
+      "opcode": "0",
+      "keywords": "0x8020000000000000",
+      "systemTime": "2026-07-19T18:24:07.884201500Z",
+      "eventRecordID": "1224903",
+      "processID": "612",
+      "threadID": "7208",
+      "channel": "Security",
+      "computer": "DC01.robslab.local",
+      "severityValue": "AUDIT_SUCCESS",
+      "message": "A Kerberos authentication ticket (TGT) was requested. Account Name: svc_legacy  Service Name: krbtgt  Pre-Authentication Type: 0  Ticket Encryption Type: 0x17"
+    },
+    "eventdata": {
+      "targetUserName": "svc_legacy",
+      "targetDomainName": "ROBSLAB.LOCAL",
+      "serviceName": "krbtgt",
+      "serviceSid": "S-1-5-21-1004336348-1177238915-682003330-502",
+      "ticketOptions": "0x40810010",
+      "status": "0x0",
+      "ticketEncryptionType": "0x17",
+      "preAuthType": "0",
+      "ipAddress": "::ffff:10.10.50.30",
+      "ipPort": "49233",
+      "certIssuerName": "-",
+      "certSerialNumber": "-",
+      "certThumbprint": "-"
+    }
+  }
+}

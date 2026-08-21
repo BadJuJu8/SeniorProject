@@ -70,22 +70,53 @@ DCSync (T1003.006). Kerberoasting lands first — green end-to-end in CI — bef
 ## Repo layout
 
 ```
-docs/         project plan (full 9-phase roadmap, RAM budget, decisions)
-rules/sigma/  portable Sigma rules (SigmaHQ-PR source + heatmap input)
-rules/wazuh/  Wazuh manager XML rules (what actually runs)
-tests/        sample events for the /logtest unit test
-.gitea/       CI workflow
-ci/           unit + integration test scripts, atomic-fire wrapper
-ansible/      rule deploy playbook
-heatmap/      ATT&CK Navigator layer generation
-writeups/     per-technique write-ups (attack -> telemetry -> rule -> CI proof -> hardening)
-secrets/      gitignored — real network topology / keys are never committed
+docs/PLAN.md            full 9-phase roadmap, RAM budget, design decisions
+docs/RUNBOOK.md         copy-pasteable build steps per phase
+rules/sigma/            portable Sigma rules (SigmaHQ-PR source + heatmap input)
+rules/wazuh/            hand-authored Wazuh manager XML — what actually runs
+tests/samples/          sample events + manifest.json (the wiring source of truth)
+ci/                     config + Wazuh client, logtest unit test, indexer integration
+                        test, atomic-fire wrapper, and an offline pytest (lab-down)
+.gitea/workflows/       the detection-as-code pipeline
+ansible/                rule deploy playbook (backup -> validate -> reload -> rollback)
+heatmap/                ATT&CK Navigator layer generation (S2AN + Python fallback)
+writeups/               per-technique: attack -> telemetry -> rule -> CI proof -> hardening
+traceability.md         Sigma <-> Wazuh rule.id <-> ATT&CK <-> atomic <-> sample <-> write-up
+secrets/                gitignored — real network topology / keys are never committed
 ```
+
+## Coverage (CI-verified detections)
+
+| Technique | ATT&CK | Wazuh rule.id | Status |
+|-----------|--------|---------------|--------|
+| Kerberoasting  | T1558.003 | `100201` | rule + tests authored |
+| AS-REP Roasting| T1558.004 | `100211` | rule + tests authored |
+| DCSync         | T1003.006 | `100221` | rule + tests authored |
+| Pass-the-Hash  | T1550.002 | `100231` | rule + tests authored |
+
+See [`traceability.md`](traceability.md) for the full mapping.
+
+## Run the offline tests (no lab required)
+
+```bash
+python -m venv .venv && . .venv/bin/activate     # Windows: .venv\Scripts\Activate.ps1
+pip install -r ci/requirements.txt
+pytest ci/test_offline.py -v                      # rules match samples; reductions hold
+bash heatmap/gen_layer.sh                         # regenerate the ATT&CK coverage layer
+```
+
+The offline suite re-implements the Wazuh field/negate match in Python, so it proves every
+rule fires on its sample **and** that the reductions suppress benign look-alikes — anywhere,
+with the lab powered down. The live two-tier test (`ci/logtest_unit.py` + `ci/confirm_alert.py`)
+runs against the real SIEM in CI.
 
 ## Status
 
-🚧 **Early build.** Repo initialized; **Phase 1 (network topology capture)** in progress. See
-[`docs/PLAN.md`](docs/PLAN.md) for the full roadmap, RAM budget, and design decisions.
+**Detection layer complete; live lab pending.** All four techniques have a Sigma rule, a
+runtime Wazuh rule, a unit-test sample, and a write-up; the offline test suite and heatmap
+generator pass. Remaining: stand up the physical lab (`docs/RUNBOOK.md`), wire the Gitea
+runners, and turn the two-tier live test green — starting with Kerberoasting. See
+[`docs/PLAN.md`](docs/PLAN.md) for the roadmap and design decisions.
 
 ## Ethics & safety
 

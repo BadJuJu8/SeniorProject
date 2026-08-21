@@ -12,6 +12,12 @@ env/
 *.egg-info/
 .pytest_cache/
 
+# -- Local env / CI runtime --
+.env
+ansible/inventory.ini
+start.txt
+atomic_start.txt
+
 # -- Ansible --
 *.retry
 .vault_pass
@@ -24,6 +30,10 @@ vault-password.txt
 *~
 .DS_Store
 Thumbs.db
+
+# -- Obsidian vault (personal notes/UI state, not part of the project) --
+.obsidian/
+Welcome.md
 
 # -- Local build artifacts --
 *.log
