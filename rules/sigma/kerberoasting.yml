@@ -1,40 +1,35 @@
-title: Suspicious Kerberos Service Ticket Request (Kerberoasting)
-id: 35fd3b83-7048-40dc-91eb-b0028259d398
-status: test
+title: Kerberoasting - RC4-HMAC Service Ticket Request (T1558.003)
+id: b3e9a1d2-4c7f-4a6e-9f2b-1c8d5e0a7f34
+status: experimental
 description: |
-    Detects a Kerberos TGS (service ticket) request that uses RC4-HMAC encryption,
-    the signature of Kerberoasting. An attacker who can authenticate to the domain
-    requests service tickets for any account that has a Service Principal Name (SPN).
-    The DC returns a ticket encrypted with the service account's NTLM hash; when the
-    weak RC4-HMAC (0x17) cipher is used the ticket can be cracked offline to recover
-    the service account's cleartext password, entirely off-network.
+    Detects a Kerberos service-ticket (TGS, Event 4769) request encrypted with RC4-HMAC
+    (0x17) - the signature of Kerberoasting. Hand-authored from a live 4769 captured in the
+    lab, then hardened against the reference rule. The filter drops machine-account SPNs,
+    the krbtgt service, and machine-account requestors so the DC's normal service-ticket
+    traffic does not alert.
 references:
     - https://attack.mitre.org/techniques/T1558/003/
     - https://github.com/redcanaryco/atomic-red-team/blob/master/atomics/T1558.003/T1558.003.md
-    - https://www.trustedsec.com/blog/art_of_kerberoast/
-    - https://adsecurity.org/?p=3458
 author: Robert Garcia
-date: 2026-07-19
+date: 2026-08-31
 tags:
     - attack.credential_access
     - attack.t1558.003
 logsource:
     product: windows
     service: security
-    definition: 'Requires the "Audit Kerberos Service Ticket Operations" success SACL (Event ID 4769) on all domain controllers.'
+    definition: 'Requires "Audit Kerberos Service Ticket Operations" (Success) so Event ID 4769 is logged on all domain controllers.'
 detection:
     selection:
         EventID: 4769
-        TicketOptions: '0x40810000'
         TicketEncryptionType: '0x17'   # RC4-HMAC: weak, crackable offline
-    reduction:
-        # Machine-account SPNs and the krbtgt account are requested constantly and
-        # are not interesting for Kerberoasting; drop them to keep signal high.
-        - ServiceName|endswith: '$'
-        - ServiceName: 'krbtgt'
-        - TargetUserName|endswith: '$@*'
-    condition: selection and not reduction
+        Status: '0x0'                  # only successfully issued (i.e. crackable) tickets
+    filter:
+        - ServiceName|endswith: '$'      # machine-account SPNs (requested constantly, benign)
+        - ServiceName: 'krbtgt'          # the KDC service itself, never a roast target
+        - TargetUserName|contains: '$@'  # machine-account requestors, e.g. WS01$@REALM
+    condition: selection and not filter
 falsepositives:
-    - Legacy applications or service accounts still configured for RC4 (baseline these before alerting; the long-term fix is to enforce AES).
+    - Legacy applications or service accounts still configured for RC4 (baseline before alerting; enforce AES long-term).
     - Authorized vulnerability scanners or red-team tooling performing SPN enumeration.
 level: high

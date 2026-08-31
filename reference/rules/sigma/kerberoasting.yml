@@ -1,0 +1,40 @@
+title: Suspicious Kerberos Service Ticket Request (Kerberoasting)
+id: 35fd3b83-7048-40dc-91eb-b0028259d398
+status: test
+description: |
+    Detects a Kerberos TGS (service ticket) request that uses RC4-HMAC encryption,
+    the signature of Kerberoasting. An attacker who can authenticate to the domain
+    requests service tickets for any account that has a Service Principal Name (SPN).
+    The DC returns a ticket encrypted with the service account's NTLM hash; when the
+    weak RC4-HMAC (0x17) cipher is used the ticket can be cracked offline to recover
+    the service account's cleartext password, entirely off-network.
+references:
+    - https://attack.mitre.org/techniques/T1558/003/
+    - https://github.com/redcanaryco/atomic-red-team/blob/master/atomics/T1558.003/T1558.003.md
+    - https://www.trustedsec.com/blog/art_of_kerberoast/
+    - https://adsecurity.org/?p=3458
+author: Robert Garcia
+date: 2026-07-19
+tags:
+    - attack.credential_access
+    - attack.t1558.003
+logsource:
+    product: windows
+    service: security
+    definition: 'Requires the "Audit Kerberos Service Ticket Operations" success SACL (Event ID 4769) on all domain controllers.'
+detection:
+    selection:
+        EventID: 4769
+        TicketOptions: '0x40810000'
+        TicketEncryptionType: '0x17'   # RC4-HMAC: weak, crackable offline
+    reduction:
+        # Machine-account SPNs and the krbtgt account are requested constantly and
+        # are not interesting for Kerberoasting; drop them to keep signal high.
+        - ServiceName|endswith: '$'
+        - ServiceName: 'krbtgt'
+        - TargetUserName|endswith: '$@*'
+    condition: selection and not reduction
+falsepositives:
+    - Legacy applications or service accounts still configured for RC4 (baseline these before alerting; the long-term fix is to enforce AES).
+    - Authorized vulnerability scanners or red-team tooling performing SPN enumeration.
+level: high

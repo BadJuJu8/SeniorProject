@@ -1,0 +1,30 @@
+<!--
+  reference/rules/wazuh/kerberoasting.xml — PRE-AUTHORED "answer key" (Kerberoasting).
+  Preserved unchanged for the Phase 4 diff. NOT loaded by the manager or read by the CI.
+  The canonical, hand-authored version lives in ../../../rules/wazuh/local_rules.xml.
+-->
+<group name="windows,active_directory,detection_as_code,">
+
+  <rule id="100200" level="0">
+    <decoded_as>windows_eventchannel</decoded_as>
+    <field name="win.system.eventID">^4769$</field>
+    <description>Kerberos service ticket (TGS) requested [4769]</description>
+    <options>no_full_log</options>
+  </rule>
+
+  <rule id="100201" level="12">
+    <if_sid>100200</if_sid>
+    <field name="win.eventdata.ticketEncryptionType" type="pcre2">^0x17$</field>
+    <field name="win.eventdata.ticketOptions" type="pcre2">^0x40810000$</field>
+    <!-- reduction: drop machine-account SPNs, krbtgt, and machine requestors -->
+    <field name="win.eventdata.serviceName" negate="yes" type="pcre2">\$$</field>
+    <field name="win.eventdata.serviceName" negate="yes" type="pcre2">(?i)^krbtgt$</field>
+    <field name="win.eventdata.targetUserName" negate="yes" type="pcre2">\$$</field>
+    <description>Kerberoasting: RC4-HMAC service ticket requested for SPN $(win.eventdata.serviceName) by $(win.eventdata.targetUserName)</description>
+    <mitre>
+      <id>T1558.003</id>
+    </mitre>
+    <group>credential_access,kerberoasting,pci_dss_10.6.1,gdpr_IV_35.7.d,</group>
+  </rule>
+
+</group>

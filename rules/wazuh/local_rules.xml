@@ -30,14 +30,19 @@
     <options>no_full_log</options>
   </rule>
 
+  <!-- Hand-authored (Robert Garcia). Hardened vs reference/rules/wazuh/kerberoasting.xml:
+         + keeps status=0x0 so only successfully-issued (crackable) tickets alert
+         + targetUserName reduction uses \$@ (matches realm-qualified WS01$@REALM);
+           the reference's \$$ was inert because targetUserName carries the @REALM suffix
+         - drops the ticketOptions constraint to stay broad (catch all RC4 roasts) -->
   <rule id="100201" level="12">
     <if_sid>100200</if_sid>
     <field name="win.eventdata.ticketEncryptionType" type="pcre2">^0x17$</field>
-    <field name="win.eventdata.ticketOptions" type="pcre2">^0x40810000$</field>
-    <!-- reduction: drop machine-account SPNs, krbtgt, and machine requestors -->
+    <field name="win.eventdata.status" type="pcre2">^0x0$</field>
+    <!-- reduction: drop machine-account SPNs, krbtgt, and machine-account requestors -->
     <field name="win.eventdata.serviceName" negate="yes" type="pcre2">\$$</field>
     <field name="win.eventdata.serviceName" negate="yes" type="pcre2">(?i)^krbtgt$</field>
-    <field name="win.eventdata.targetUserName" negate="yes" type="pcre2">\$$</field>
+    <field name="win.eventdata.targetUserName" negate="yes" type="pcre2">\$@</field>
     <description>Kerberoasting: RC4-HMAC service ticket requested for SPN $(win.eventdata.serviceName) by $(win.eventdata.targetUserName)</description>
     <mitre>
       <id>T1558.003</id>
