@@ -1,0 +1,14 @@
+title: Kerberoasting Try 1
+logsource:
+  product: windows
+  service: security
+detection:
+  selection:
+    # the fields that must match (your conditions 1, 2, 4)
+    EventID: 4769
+    TicketEncryptionType: '0x17'
+    Status: '0x0'
+  filter:
+    # the thing to exclude (your condition 3)
+    ServiceName|endswith: "$"
+  condition: selection and not filter
