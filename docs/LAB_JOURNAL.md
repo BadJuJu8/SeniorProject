@@ -338,3 +338,51 @@ Discover confirmation above is the indexer integration side.)
 **What I can now explain (Phase 4 "done when"):** every field and every reduction in *my* rule, why RC4
 is the tell, why the machine-account exclusion needs `endswith`+`pcre2`, and why the same event went
 from "benign login" to "Kerberoasting." ✓
+
+### 2026-09-02 — Step 2b: deploy live, and the structure that wouldn't fire
+
+**Goal:** deploy the rule to the live manager and confirm a real roast fires it — the *integration*
+half of the two-tier test.
+
+**Result — WORKING, after a real fight.** A live roast now fires **`rule.id 100201` (level 12)**. But
+getting there exposed a genuine flaw in the pre-authored design.
+
+**The bug: the reference's `parent/child + <decoded_as>` structure does NOT fire on this manager.**
+The reference (and my first canonical version) used a level-0 "sighting" parent
+(`<decoded_as>windows_eventchannel</decoded_as>`, id `100200`) + a level-12 child
+(`<if_sid>100200</if_sid>`, id `100201`). Deployed live, a real roast kept matching the **generic base
+rule `60106` "Windows Logon Success" (level 3)** instead of `100201` — the custom rule never won.
+Swapping the parent's `<decoded_as>` for `<if_group>windows_security</if_group>` did **not** fix it;
+the parent/child split itself was the problem.
+
+**The fix: a SINGLE rule chained via `<if_group>windows_security</if_group>`** — exactly the shape of
+the first working version (old id `100100`). It fires `100201` at level 12, verified against a live
+roast. Collapsing the parent/child back into one rule was the whole fix.
+
+**Why this matters (the thesis, proven the hard way):** the pre-authored layer *passed every offline
+test* (`pytest ci/test_offline.py` = 30 green) yet **did not fire live.** The offline model checks
+whether fields match; it does not model how a custom rule competes with the base ruleset. Per the
+README the detection layer was authored but never live-tested — so this flaw sat undiscovered until the
+integration test. **This is exactly why the two-tier test exists: offline green is necessary, not
+sufficient.** (Custom rules generally must chain onto the base ruleset via `if_sid`/`if_group` to
+override it — a known Wazuh behaviour, not a novel discovery, but a real gap in *this* repo.)
+
+**Debugging trail (for the report):**
+- The roast *was* being logged (4769 present, `auditpol` still `Success`) — it just matched `60106`,
+  not `100201`. Telemetry fine; rule not winning.
+- `wazuh-logtest` on a hand-pasted JSON event decoded via the generic **`json`** decoder, not
+  **`windows_eventchannel`** — a logtest artifact (pasted JSON ≠ agent-delivered eventchannel). Don't
+  trust hand-fed logtest for eventchannel `decoded_as` behaviour.
+- Decisive evidence was the **control experiment**: v1 (single rule + `if_group`) fired; v2
+  (parent/child) did not — *same fields*, so the structure was the only variable.
+- Fastest live confirmation: `tail -f /var/ossec/logs/alerts/alerts.log` while firing — the alert and
+  its `rule.id` appear the instant the event lands, with no Discover/time-range/index noise.
+
+**Also relearned:** the `4769` audit subcategory ("Kerberos Service Ticket Operations") is separate
+from Logon/Logoff — seeing `4624`/`4634` but no `4769` means the Kerberos switch flipped off
+(GPO/reboot). And `klist` (list) ≠ `klist purge`; only **purge** forces a fresh KDC request → a new
+`4769`.
+
+**Canonical rule is now the single-rule design** in `rules/wazuh/local_rules.xml`; the pre-authored
+parent/child version is preserved (as the non-firing answer key) in `reference/`. Offline suite still
+30/30 green. **Step 2 — detection engineering + live verification — is DONE.**

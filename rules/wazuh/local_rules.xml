@@ -22,23 +22,27 @@
   <!-- ============================================================= -->
   <!-- Kerberoasting  —  T1558.003  —  sigma: kerberoasting.yml       -->
   <!-- Windows Security 4769: a Kerberos service ticket was requested -->
+  <!--                                                                 -->
+  <!-- Hand-authored (Robert Garcia) and LIVE-VERIFIED on the lab DC:  -->
+  <!-- a real roast fires this rule as 100201 (level 12).              -->
+  <!--                                                                 -->
+  <!-- SINGLE rule chained via <if_group>windows_security</if_group>.  -->
+  <!-- NOTE: reference/rules/wazuh/kerberoasting.xml uses a level-0     -->
+  <!-- <decoded_as> parent + <if_sid> child. That structure was never  -->
+  <!-- tested live and does NOT fire on this manager — the base rule   -->
+  <!-- 60106 keeps winning. The single if_group rule below is what      -->
+  <!-- actually fires. See docs/LAB_JOURNAL.md for the full saga.      -->
+  <!--                                                                 -->
+  <!-- Hardened vs reference: keeps status=0x0 (only issued/crackable  -->
+  <!-- tickets); targetUserName reduction uses \$@ for realm-qualified  -->
+  <!-- WS01$@REALM (reference's \$$ is inert here); drops ticketOptions -->
+  <!-- to stay broad and catch all RC4 roasts.                         -->
   <!-- ============================================================= -->
-  <rule id="100200" level="0">
-    <decoded_as>windows_eventchannel</decoded_as>
-    <field name="win.system.eventID">^4769$</field>
-    <description>Kerberos service ticket (TGS) requested [4769]</description>
-    <options>no_full_log</options>
-  </rule>
-
-  <!-- Hand-authored (Robert Garcia). Hardened vs reference/rules/wazuh/kerberoasting.xml:
-         + keeps status=0x0 so only successfully-issued (crackable) tickets alert
-         + targetUserName reduction uses \$@ (matches realm-qualified WS01$@REALM);
-           the reference's \$$ was inert because targetUserName carries the @REALM suffix
-         - drops the ticketOptions constraint to stay broad (catch all RC4 roasts) -->
   <rule id="100201" level="12">
-    <if_sid>100200</if_sid>
-    <field name="win.eventdata.ticketEncryptionType" type="pcre2">^0x17$</field>
-    <field name="win.eventdata.status" type="pcre2">^0x0$</field>
+    <if_group>windows_security</if_group>
+    <field name="win.system.eventID">^4769$</field>
+    <field name="win.eventdata.ticketEncryptionType">^0x17$</field>
+    <field name="win.eventdata.status">^0x0$</field>
     <!-- reduction: drop machine-account SPNs, krbtgt, and machine-account requestors -->
     <field name="win.eventdata.serviceName" negate="yes" type="pcre2">\$$</field>
     <field name="win.eventdata.serviceName" negate="yes" type="pcre2">(?i)^krbtgt$</field>
