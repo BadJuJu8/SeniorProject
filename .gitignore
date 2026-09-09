@@ -38,3 +38,4 @@ Welcome.md
 # -- Local build artifacts --
 *.log
 heatmap/navigator_layer.json
+inventory.ini
