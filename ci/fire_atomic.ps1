@@ -4,7 +4,7 @@
     start time so the integration test can scope its indexer query.
 
 .DESCRIPTION
-    Runs on the Gitea Act runner that lives ON the Windows target (see docs/PLAN.md),
+    Runs on the Gitea Act runner that lives ON the Windows target (see _later/docs/PLAN.md),
     so there is no remoting. It resolves which atomic to run from the technique key
     (or an explicit ATT&CK id), optionally installs prerequisites, executes the test,
     and can clean up afterwards.
@@ -61,7 +61,7 @@ function Resolve-Atomic {
 }
 
 if (-not (Get-Module -ListAvailable -Name 'Invoke-AtomicRedTeam')) {
-    throw "Invoke-AtomicRedTeam is not installed. See docs/RUNBOOK.md (Phase 5) for setup."
+    throw "Invoke-AtomicRedTeam is not installed. See _later/docs/RUNBOOK.md (Phase 5) for setup."
 }
 Import-Module Invoke-AtomicRedTeam -ErrorAction Stop
 

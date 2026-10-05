@@ -5,7 +5,7 @@ local runs, drop a `.env` file at the repo root (see `.env.example`); it is
 gitignored and loaded automatically here — no python-dotenv dependency required.
 
 Defaults target a Wazuh all-in-one reachable on loopback with self-signed TLS,
-which is the lab topology in docs/PLAN.md. Override per environment.
+which is the lab topology in _later/docs/PLAN.md. Override per environment.
 """
 from __future__ import annotations
 

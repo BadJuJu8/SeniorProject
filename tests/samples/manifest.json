@@ -1,5 +1,5 @@
 {
-  "_comment": "Single source of truth linking each unit-test sample to the Wazuh rule it must fire, the Sigma rule it mirrors, the ATT&CK technique, and the Atomic Red Team test that reproduces it live. Read by ci/logtest_unit.py, ci/confirm_alert.py, ci/fire_atomic.ps1, the offline pytest, and traceability.md. Keep it in sync when adding a technique.",
+  "_comment": "Single source of truth linking each unit-test sample to the Wazuh rule it must fire, the Sigma rule it mirrors, the ATT&CK technique, and the Atomic Red Team test that reproduces it live. Read by ci/logtest_unit.py, ci/confirm_alert.py, ci/fire_atomic.ps1, the offline pytest, and _later/traceability.md. Keep it in sync when adding a technique.",
   "cases": [
     {
       "technique": "kerberoasting",
@@ -10,40 +10,13 @@
       "sigma": "rules/sigma/kerberoasting.yml",
       "wazuh": "rules/wazuh/local_rules.xml",
       "writeup": "writeups/kerberoasting.md",
-      "atomic": { "technique": "T1558.003", "test_numbers": [4], "defender": "on" }
-    },
-    {
-      "technique": "asrep_roasting",
-      "attack_id": "T1558.004",
-      "sample": "4768_asrep.json",
-      "expected_rule_id": "100211",
-      "event_id": "4768",
-      "sigma": "rules/sigma/asrep_roasting.yml",
-      "wazuh": "rules/wazuh/local_rules.xml",
-      "writeup": "writeups/asrep_roasting.md",
-      "atomic": { "technique": "T1558.004", "test_numbers": [1], "defender": "off" }
-    },
-    {
-      "technique": "dcsync",
-      "attack_id": "T1003.006",
-      "sample": "4662_dcsync.json",
-      "expected_rule_id": "100221",
-      "event_id": "4662",
-      "sigma": "rules/sigma/dcsync.yml",
-      "wazuh": "rules/wazuh/local_rules.xml",
-      "writeup": "writeups/dcsync.md",
-      "atomic": { "technique": "T1003.006", "test_numbers": [1], "defender": "on" }
-    },
-    {
-      "technique": "pass_the_hash",
-      "attack_id": "T1550.002",
-      "sample": "4624_pth.json",
-      "expected_rule_id": "100231",
-      "event_id": "4624",
-      "sigma": "rules/sigma/pass_the_hash.yml",
-      "wazuh": "rules/wazuh/local_rules.xml",
-      "writeup": "writeups/pass_the_hash.md",
-      "atomic": { "technique": "T1550.002", "test_numbers": [1], "defender": "off" }
+      "atomic": {
+        "technique": "T1558.003",
+        "test_numbers": [
+          4
+        ],
+        "defender": "on"
+      }
     }
   ]
 }

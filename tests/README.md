@@ -13,5 +13,5 @@ with the lab powered down:
 
 `manifest.json` is the single source of truth wiring each sample to its expected `rule.id`,
 Sigma rule, ATT&CK id, write-up, and Atomic Red Team test. It is read by `ci/logtest_unit.py`,
-`ci/confirm_alert.py`, `ci/fire_atomic.ps1`, the offline pytest, and `traceability.md` — add a
+`ci/confirm_alert.py`, `ci/fire_atomic.ps1`, the offline pytest, and `_later/traceability.md` — add a
 case here when you add a technique and everything else picks it up.

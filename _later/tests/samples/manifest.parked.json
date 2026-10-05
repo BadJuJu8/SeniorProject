@@ -1,0 +1,56 @@
+{
+  "_comment": "Manifest cases parked during repo cleanup. Move a case back into tests/samples/manifest.json (and its files back out of _later/) when you take that technique on.",
+  "cases": [
+    {
+      "technique": "asrep_roasting",
+      "attack_id": "T1558.004",
+      "sample": "4768_asrep.json",
+      "expected_rule_id": "100211",
+      "event_id": "4768",
+      "sigma": "rules/sigma/asrep_roasting.yml",
+      "wazuh": "rules/wazuh/local_rules.xml",
+      "writeup": "writeups/asrep_roasting.md",
+      "atomic": {
+        "technique": "T1558.004",
+        "test_numbers": [
+          1
+        ],
+        "defender": "off"
+      }
+    },
+    {
+      "technique": "dcsync",
+      "attack_id": "T1003.006",
+      "sample": "4662_dcsync.json",
+      "expected_rule_id": "100221",
+      "event_id": "4662",
+      "sigma": "rules/sigma/dcsync.yml",
+      "wazuh": "rules/wazuh/local_rules.xml",
+      "writeup": "writeups/dcsync.md",
+      "atomic": {
+        "technique": "T1003.006",
+        "test_numbers": [
+          1
+        ],
+        "defender": "on"
+      }
+    },
+    {
+      "technique": "pass_the_hash",
+      "attack_id": "T1550.002",
+      "sample": "4624_pth.json",
+      "expected_rule_id": "100231",
+      "event_id": "4624",
+      "sigma": "rules/sigma/pass_the_hash.yml",
+      "wazuh": "rules/wazuh/local_rules.xml",
+      "writeup": "writeups/pass_the_hash.md",
+      "atomic": {
+        "technique": "T1550.002",
+        "test_numbers": [
+          1
+        ],
+        "defender": "off"
+      }
+    }
+  ]
+}

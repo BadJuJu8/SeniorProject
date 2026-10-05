@@ -6,7 +6,7 @@
 # alert landed in the Wazuh indexer. Only then is the rule deployed and the ATT&CK
 # heatmap regenerated.
 #
-# Runner topology (see docs/PLAN.md):
+# Runner topology (see _later/docs/PLAN.md):
 #   label `linux`   -> host-mode Act runner on the Gitea LXC (has python, ansible, S2AN)
 #   label `windows` -> Act runner ON the Windows target (fires atomics locally, no remoting)
 #
@@ -112,18 +112,20 @@ jobs:
         if: always()
         run: rm -f ansible/.vault_pass ansible/inventory.ini
 
-  # ---------------------------------------------------------------- #
-  # 6. Regenerate the ATT&CK coverage heatmap.                       #
-  # ---------------------------------------------------------------- #
-  heatmap:
-    needs: deploy
-    runs-on: linux
-    steps:
-      - uses: actions/checkout@v4
-      - name: Generate ATT&CK Navigator layer
-        run: bash heatmap/gen_layer.sh
-      - name: Publish the layer as a build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: attack-navigator-layer
-          path: heatmap/navigator_layer.json
+  # Heatmap job parked with heatmap/ (now _later/heatmap/). Uncomment and move
+  # the folder back when you pick the heatmap up.
+#  # ---------------------------------------------------------------- #
+#  # 6. Regenerate the ATT&CK coverage heatmap.                       #
+#  # ---------------------------------------------------------------- #
+#  heatmap:
+#    needs: deploy
+#    runs-on: linux
+#    steps:
+#      - uses: actions/checkout@v4
+#      - name: Generate ATT&CK Navigator layer
+#        run: bash heatmap/gen_layer.sh
+#      - name: Publish the layer as a build artifact
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: attack-navigator-layer
+#          path: heatmap/navigator_layer.json

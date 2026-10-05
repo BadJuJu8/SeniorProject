@@ -70,8 +70,8 @@ DCSync (T1003.006). Kerberoasting lands first — green end-to-end in CI — bef
 ## Repo layout
 
 ```
-docs/PLAN.md            full 9-phase roadmap, RAM budget, design decisions
-docs/RUNBOOK.md         copy-pasteable build steps per phase
+_later/docs/PLAN.md            full 9-phase roadmap, RAM budget, design decisions
+_later/docs/RUNBOOK.md         copy-pasteable build steps per phase
 rules/sigma/            portable Sigma rules (SigmaHQ-PR source + heatmap input)
 rules/wazuh/            hand-authored Wazuh manager XML — what actually runs
 tests/samples/          sample events + manifest.json (the wiring source of truth)
@@ -81,7 +81,7 @@ ci/                     config + Wazuh client, logtest unit test, indexer integr
 ansible/                rule deploy playbook (backup -> validate -> reload -> rollback)
 heatmap/                ATT&CK Navigator layer generation (S2AN + Python fallback)
 writeups/               per-technique: attack -> telemetry -> rule -> CI proof -> hardening
-traceability.md         Sigma <-> Wazuh rule.id <-> ATT&CK <-> atomic <-> sample <-> write-up
+_later/traceability.md         Sigma <-> Wazuh rule.id <-> ATT&CK <-> atomic <-> sample <-> write-up
 secrets/                gitignored — real network topology / keys are never committed
 ```
 
@@ -94,7 +94,7 @@ secrets/                gitignored — real network topology / keys are never co
 | DCSync         | T1003.006 | `100221` | rule + tests authored |
 | Pass-the-Hash  | T1550.002 | `100231` | rule + tests authored |
 
-See [`traceability.md`](traceability.md) for the full mapping.
+See [`_later/traceability.md`](_later/traceability.md) for the full mapping.
 
 ## Run the offline tests (no lab required)
 
@@ -114,9 +114,9 @@ runs against the real SIEM in CI.
 
 **Detection layer complete; live lab pending.** All four techniques have a Sigma rule, a
 runtime Wazuh rule, a unit-test sample, and a write-up; the offline test suite and heatmap
-generator pass. Remaining: stand up the physical lab (`docs/RUNBOOK.md`), wire the Gitea
+generator pass. Remaining: stand up the physical lab (`_later/docs/RUNBOOK.md`), wire the Gitea
 runners, and turn the two-tier live test green — starting with Kerberoasting. See
-[`docs/PLAN.md`](docs/PLAN.md) for the roadmap and design decisions.
+[`_later/docs/PLAN.md`](_later/docs/PLAN.md) for the roadmap and design decisions.
 
 ## Ethics & safety
 
