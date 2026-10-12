@@ -386,3 +386,130 @@ from Logon/Logoff — seeing `4624`/`4634` but no `4769` means the Kerberos swit
 **Canonical rule is now the single-rule design** in `rules/wazuh/local_rules.xml`; the pre-authored
 parent/child version is preserved (as the non-firing answer key) in `reference/`. Offline suite still
 30/30 green. **Step 2 — detection engineering + live verification — is DONE.**
+
+### 2026-10-05 — Repo cleanup: make the repo match what's actually built
+
+**Goal:** stop getting lost in the repo. A lot of it was pre-generated scaffolding (AS-REP, DCSync,
+PtH, heatmap) that hadn't been worked through yet, mixed in with the Kerberoasting work that had.
+
+**What we did** `# on: windows clone`
+- Branch `cleanup`: moved everything not yet built into `_later/` (see `_later/README.md` for what
+  each piece is and how to bring it back). Nothing deleted — `git mv` keeps history.
+- Trimmed `tests/samples/manifest.json` to the one live-verified case (kerberoasting); the other three
+  cases are parked in `_later/tests/samples/manifest.parked.json`.
+- Three negative tests that loaded the parked samples moved to `_later/ci/parked_negative_tests.py`.
+  Offline suite: **12/12 green** (was 30 — fewer cases, not fewer checks per case).
+- The CI `heatmap` job is commented out until `heatmap/` comes back.
+- Merged to `main` (`e6ee52b`). Note: the 09-02 entry's `reference/` is now `_later/reference/`.
+
+**Playbook check** `# on: netAdmin`
+- `ansible-playbook --syntax-check deploy-rule.yml` — parses the YAML without touching any host.
+  Passed. The warnings were all one cause: no `inventory.ini` next to `ansible.cfg`.
+- `inventory.ini` is gitignored on purpose (real IPs + SSH user), so a fresh clone never has it.
+  Moved it into `ansible/` — `ansible.cfg`'s `inventory = inventory.ini` is resolved relative to the
+  cfg's own directory, and Ansible only reads an `ansible.cfg` in the directory you run from.
+
+**Git topology, written down because it caused confusion:**
+- Windows clone → `origin` (GitHub) only.
+- netAdmin clone `~/SeniorProject` → `origin` (GitHub) **and** `gitea` (`localhost:3000`). This is the
+  hub: pull from GitHub, push to Gitea. **A push to Gitea is what triggers CI.**
+- netAdmin's DNS is intermittent — `Could not resolve hostname ssh.github.com` broke a pull.
+
+### 2026-10-07 — Phase 6: first CI runs, and `validate` goes GREEN
+
+**Goal:** get the cheapest CI job — `validate` (Sigma lint + offline tests, Linux runner, no lab) —
+green in Gitea.
+
+**Housekeeping first** `# on: netAdmin`
+- **Reset the runner registration token** (Site Administration → Actions → Runners → Create new
+  Runner → Reset). It had been pasted into chat twice. Resetting does **not** break the registered
+  runner: the registration token is a one-time join code; after registering, the runner authenticates
+  with its own runner token stored in `~/.runner/.runner`.
+- **Forgot the Gitadmin password** — reset from the CLI:
+  `sudo -u git gitea admin user change-password --username Gitadmin --password ... --config
+  /etc/gitea/app.ini --work-path /var/lib/gitea`. Runs as `git` (not root) so it doesn't leave
+  root-owned files in Gitea's data dir; it can read `app.ini` because that file is `640 root:git`.
+- **Gotcha:** `git push` then failed with `remote: Update your password`. The CLI reset sets a
+  *must-change-password* flag, and Gitea refuses git-over-HTTP until it's cleared (log in on the web
+  and change it, or re-run with `--must-change-password=false`).
+
+**First runs — three failures, each one layer deeper** (the runner is `linux:host` = host mode: jobs
+run directly on netAdmin, so every tool a job uses must be installed there)
+1. `actions/checkout@v4` → **`Cannot find: node in PATH`.** Checkout is a JavaScript action; in host
+   mode there's no container bringing Node along. Fix: `sudo apt install nodejs`.
+2. `Install tooling` → **`/usr/bin/python: No module named pip`.** Ubuntu ships pip separately, and
+   newer Ubuntu also blocks system-wide `pip install` (PEP 668, "externally-managed-environment").
+   Fix: `sudo apt install python3-venv`, and the step now builds a venv:
+   ```yaml
+   python3 -m venv .venv
+   .venv/bin/pip install --upgrade pip
+   .venv/bin/pip install -r ci/requirements.txt
+   .venv/bin/pip install sigma-cli pysigma-validators-sigmahq
+   echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+   ```
+   *Why the last line:* every `run:` step is a fresh shell, so `source activate` wouldn't survive to the
+   next step. Appending to `$GITHUB_PATH` puts `.venv/bin` on PATH for all later steps, so `sigma` and
+   `pytest` resolve to the venv's copies.
+3. Checkout again → **`lookup github.com on 127.0.0.53:53 ... i/o timeout`.** netAdmin's DNS
+   (systemd-resolved) dropped out again; the runner re-fetches `actions/checkout` from GitHub every run.
+
+**Result — `validate` GREEN.** First successful CI run: push → Gitea → runner → lint → 12 tests → pass.
+
+**Known limitation (for the report):** the lab is meant to be isolated, but `validate` needs the
+internet twice — `actions/checkout` from GitHub and packages from PyPI. Future fix: mirror
+`actions/checkout` into Gitea and cache the Python packages.
+
+### 2026-10-12 — Fire the real Atomic Red Team test: the stock test misses, test #5 hits
+
+**Goal:** atomics had never actually run in this lab (the 08-30 roast was a hand-rolled .NET call).
+Before CI fires one automatically, fire it by hand and confirm rule `100201`.
+
+**Prep** `# on: dc, workstation`
+- **Audit policy moved to GPO.** The DC's Kerberos auditing was a hand-run `auditpol`, which had
+  flipped off once before (09-02). Now set in **Default Domain Controllers Policy → Advanced Audit
+  Policy**: Kerberos Service Ticket Operations (4769), Kerberos Authentication Service (4768),
+  Directory Service Access (4662), Logon (4624) — all Success — plus *"Audit: Force audit policy
+  subcategory settings"* = Enabled. *Catch:* once a GPO defines any advanced subcategory it
+  **replaces** the local audit config, so everything needed later is in the GPO now.
+  The workstation needs **no** auditing for Kerberoasting — the 4769 is written by the DC (the KDC).
+- Installed Atomic Red Team on `IT-RGARCIA` (`C:\AtomicRedTeam`); fired as `robslab\robert.garcia`.
+
+**Attempt 1 — test #4 "Request A Single Ticket via PowerShell": no alert, and that's correct.**
+`-ShowDetails` shows the SPN it requests:
+```powershell
+$ComputerFQDN = $env:LogonServer.trimStart('\') + "." + $env:UserDnsDomain
+New-Object System.IdentityModel.Tokens.KerberosRequestorSecurityToken -ArgumentList "HTTP/$ComputerFQDN"
+```
+`$env:LogonServer` is the DC, so this asks for `HTTP/DC01.robslab.local` → a ticket for the **DC's
+machine account `DC01$`**, AES `0x12`. The rule deliberately ignores machine accounts and only matches
+RC4 `0x17`, so it stays quiet — correctly. Test #4 has no input arguments, so it can't be pointed at
+`svc_sql`. **`manifest.json` pinned CI to this test — it could never have passed.**
+
+**Detours (for the report):**
+- `Found 0 atomic tests applicable` — typo, `T1550.003` (Pass the Ticket) instead of `T1558.003`.
+- Dashboard query `ticketEncryptionType: 17` found nothing — the field is the **string** `"0x17"`.
+- The first 4769s found were **the DC's own background traffic**, not the attack: `targetUserName:
+  DC01$`, `ipAddress: ::1`, service `DC01$`/`krbtgt`. The stock rule labels every one of them `60106`
+  "Windows Logon Success" (`firedtimes` ~100) — the noise this project's rule exists to cut through.
+- Wazuh logged the investigation itself: the `sudo grep` on `alerts.json` raised rule `5402`
+  "Successful sudo to ROOT".
+
+**Attempt 2 — test #5 "Request All Tickets via PowerShell": DETECTED.**
+Test #5 runs `setspn -T $env:USERDNSDOMAIN -Q */*` and requests a ticket for **every** SPN in the domain.
+```powershell
+klist purge
+Invoke-AtomicTest T1558.003 -TestNumbers 5
+```
+Result — **`rule.id 100201`, level 12**, "Kerberoasting: RC4-HMAC service ticket requested for SPN
+svc_sql by robert.garcia@ROBSLAB.LOCAL", MITRE T1558.003 / Credential Access:
+- `serviceName: svc_sql`, `ticketEncryptionType: 0x17`, `serviceSupportedEncryptionTypes: 0x4 (RC4)`
+- requester `robert.garcia@ROBSLAB.LOCAL` from `10.20.0.101` (workstation subnet; DC is `10.10.0.100`)
+- **`firedtimes: 1`** — the test requested tickets for every SPN, and the rule fired **once**, on the
+  only roastable one. Detects the real target, ignores the machine-account noise in the same burst.
+
+**Takeaway:** the stock ART Kerberoasting test (#4) does not exercise a correctly tuned detection —
+validate the *attack tooling*, not just the rule. Kerberoasting is now proven against a standard
+attack tool, not just a hand-rolled request.
+
+**To do:** switch the manifest's kerberoasting atomic from `[4]` to `[5]`; register the Windows
+runner on `IT-RGARCIA` (label `windows`); add Gitea secrets/vars; run `detect` end to end.
