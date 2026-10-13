@@ -13,7 +13,7 @@
       "atomic": {
         "technique": "T1558.003",
         "test_numbers": [
-          4
+          5
         ],
         "defender": "on"
       }

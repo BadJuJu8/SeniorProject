@@ -87,6 +87,15 @@ def main() -> int:
             failures += 1
             print(f"[FAIL]  {tech:<16} expected rule.id {expected}, got {fired or 'no match'}",
                   file=sys.stderr)
+            # Show how the manager parsed the event: which decoder claimed it and what the
+            # matched rule was. A wrong decoder means the base Windows rules (and so
+            # if_group windows_security) never ran.
+            output = data.get("output") or {}
+            rule = output.get("rule") or {}
+            print(f"           decoder: {(output.get('decoder') or {}).get('name', 'none')}",
+                  file=sys.stderr)
+            print(f"           matched: {rule.get('description', '-')} groups={rule.get('groups', [])}",
+                  file=sys.stderr)
             for msg in data.get("messages", []) or []:
                 print(f"           logtest: {msg}", file=sys.stderr)
 
