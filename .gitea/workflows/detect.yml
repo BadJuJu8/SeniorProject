@@ -99,7 +99,6 @@ jobs:
     runs-on: linux
     steps:
       - uses: actions/checkout@v4
-      # No Ansible Vault yet: nothing in the repo is encrypted, so no vault password.
       - name: Materialize inventory from secrets
         run: printf '%s\n' "${{ secrets.ANSIBLE_INVENTORY }}" > ansible/inventory.ini
       # ansible.cfg is only read from the current directory, so point at it explicitly
@@ -108,6 +107,9 @@ jobs:
       # accepts it from netAdmin (from="10.60.0.100" in authorized_keys).
       # BatchMode: CI has no keyboard, so fail on a password/passphrase prompt
       # instead of hanging on it.
+      # The sudo password (ansible_become_password) is vaulted in
+      # ansible/group_vars/wazuh_manager/vault.yml. The vault password lives on the
+      # runner host like the SSH key: ~/.ansible_vault_pass, mode 600, never in git.
       - name: Deploy local_rules.xml + reload the manager
         timeout-minutes: 10
         env:
@@ -115,7 +117,9 @@ jobs:
           ANSIBLE_SSH_ARGS: -o BatchMode=yes -o IdentitiesOnly=yes -o ControlMaster=auto -o ControlPersist=60s
         run: |
           export ANSIBLE_PRIVATE_KEY_FILE="$HOME/.ssh/ci_deploy_ed25519"
-          ansible-playbook -i ansible/inventory.ini ansible/deploy-rule.yml
+          ansible-playbook -i ansible/inventory.ini \
+            --vault-password-file "$HOME/.ansible_vault_pass" \
+            ansible/deploy-rule.yml
       - name: Post-deploy sanity — the rule loaded after the reload
         run: |
           python3 -m venv .venv

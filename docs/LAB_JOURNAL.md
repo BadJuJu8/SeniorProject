@@ -631,3 +631,11 @@ deploy key** `~/.ssh/ci_deploy_ed25519` (no passphrase), authorized on the manag
 passphrase for manual runs. CI selects it via `ANSIBLE_PRIVATE_KEY_FILE` in the deploy step.
 **For the report:** unattended automation needs an unattended credential — compensate for the
 missing passphrase by scoping it (source IP, one user, file perms 600, one purpose).
+
+**Next blocker: `sudo: a password is required`** (CI key logs in fine). Learned: a "narrow" NOPASSWD
+sudo rule doesn't work with Ansible — `become` runs `sudo /bin/sh -c '... python3 /tmp/<module>'`,
+so the rule must allow a shell/Python, i.e. full root anyway. Real choice was whether that root still
+needs a secret. **Decision: Ansible Vault.** `ansible_become_password` encrypted (AES256) in
+`ansible/group_vars/wazuh_manager/vault.yml` (committed — it's ciphertext); the vault password is a
+random 32-byte string in `~/.ansible_vault_pass` (mode 600) on netAdmin, next to the SSH key, never in
+git. CI passes it with `--vault-password-file`.
