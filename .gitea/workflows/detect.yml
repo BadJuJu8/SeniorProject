@@ -1,8 +1,8 @@
 # Detection-as-Code pipeline — the project's centrepiece.
 #
 # On every push that touches a rule, sample, or CI script, this fails the build
-# unless the detection provably fires: first as a deterministic /logtest unit test,
-# then — for real — by firing the live Atomic Red Team technique and confirming the
+# unless the detection provably fires: first a pre-flight check that the rule is
+# loaded on the manager (/rules), then — for real — by firing the live Atomic Red Team technique and confirming the
 # alert landed in the Wazuh indexer. Only then is the rule deployed and the ATT&CK
 # heatmap regenerated.
 #
@@ -63,7 +63,7 @@ jobs:
 
   # ---------------------------------------------------------------- #
   # 2 + 3 + 4. Two-tier detection test against the live lab.         #
-  #    unit (/logtest) -> fire atomic -> integration (_search)       #
+  #    pre-flight (/rules) -> fire atomic -> integration (_search)   #
   # ---------------------------------------------------------------- #
   detect:
     needs: validate
@@ -74,9 +74,12 @@ jobs:
         shell: pwsh
         run: python -m pip install -r ci/requirements.txt
 
-      - name: Unit test — /logtest asserts the rule matches a sample event
+      # /logtest can't decode agent-delivered Windows events (a pasted 4769 always
+      # lands on the generic json decoder), so it can't unit-test Windows rules.
+      # The pre-flight only proves the rule is loaded; the atomic is the real test.
+      - name: Pre-flight — the rule is loaded on the manager
         shell: pwsh
-        run: python ci/logtest_unit.py --technique $env:TECH
+        run: python ci/rule_loaded.py --technique $env:TECH
 
       - name: Fire the live atomic on this Windows target
         shell: pwsh
@@ -106,10 +109,10 @@ jobs:
           ansible-playbook -i ansible/inventory.ini \
             --vault-password-file ansible/.vault_pass \
             ansible/deploy-rule.yml
-      - name: Post-deploy sanity — /logtest still matches on the live rule
+      - name: Post-deploy sanity — the rule loaded after the reload
         run: |
           pip install -r ci/requirements.txt
-          python ci/logtest_unit.py --technique "$TECH"
+          python ci/rule_loaded.py --technique "$TECH"
       - name: Scrub secrets
         if: always()
         run: rm -f ansible/.vault_pass ansible/inventory.ini

@@ -513,3 +513,75 @@ attack tool, not just a hand-rolled request.
 
 **To do:** switch the manifest's kerberoasting atomic from `[4]` to `[5]`; register the Windows
 runner on `IT-RGARCIA` (label `windows`); add Gitea secrets/vars; run `detect` end to end.
+
+### 2026-10-12 (cont.) – 10-14 — Windows runner up; `detect` reaches the manager; unit test blocked on the decoder
+
+**Goal:** get the `detect` job (runs on the Windows workstation) running end to end in CI.
+
+**Done:**
+- **Manifest pinned to ART test 5** (`fb8b726`).
+- **Windows runner registered** `# on: workstation` — downloaded act_runner 0.2.11 (windows-amd64) to
+  `C:\act_runner\act_runner.exe`, registered `--name it-rgarcia --labels windows:host` against Gitea
+  at `http://10.60.0.100:3000`, running with `.\act_runner.exe daemon` in a console as
+  `robslab\robert.garcia`. Gitea picks up `detect` jobs: checkout, Node, Git, Python, pwsh all OK.
+- **Why a console, not a Windows service:** a service runs as LocalSystem, so the atomic would request
+  tickets as `IT-RGARCIA$@ROBSLAB.LOCAL` — and rule `100201` drops requesters ending in `$@` (it's
+  there to cut machine-account noise). **Limitation for the report:** roasting from a SYSTEM shell
+  (machine account), or from a user account deliberately named like `backup$`, is not detected.
+- **First `detect` run:** `[FATAL] No manager password set`. The API user is `wazuh-wui` (password
+  from the dashboard's `wazuh.yml` / `wazuh-install-files.tar`) — *not* the dashboard login, which is
+  the indexer `admin`. Added to Gitea repo Settings → Actions → Secrets/Variables. After that the
+  logtest session initializes, so the manager API credentials work.
+- **Found:** the Wazuh indexer only listens on `127.0.0.1:9200` (secure default), so the workstation
+  can't reach it for the integration test. Plan: `network.host: ["127.0.0.1", "<wazuh-ip>"]` in
+  `/etc/wazuh-indexer/opensearch.yml`, firewall 9200 open **only** to `10.20.0.101`, check with
+  `Test-NetConnection` from the workstation. **Status: not confirmed done.**
+
+**The blocker — unit test fails with the wrong decoder.**
+```
+[FAIL]  kerberoasting    expected rule.id 100201, got 1002
+           decoder: json
+           matched: Unknown problem somewhere in the system. groups=['syslog', 'errors']
+```
+(The `decoder:` / `matched:` lines were added to `ci/logtest_unit.py` in `fb8b726` to see this.)
+**Why it fails:** `/logtest` decoded the sample with the generic **`json`** decoder, not
+**`windows_eventchannel`** (which the live alerts show). Only events from the eventchannel decoder go
+through the base Windows rules that add the `windows_security` group, and `100201` hangs off
+`if_group windows_security` — so it's never even evaluated. `1002` fires on the word "Failure" in the
+message text. **The rule is fine** (it fired live on 10-12); the problem is how the unit test hands the
+event to logtest. Same artifact the 09-02 entry warned about.
+
+**Experiment (10-14)** `# on: wazuh manager (splunk), via ssh from netAdmin` — sent the sample to
+`/logtest` with each `log_format`:
+```
+== windows_eventchannel decoder: json rule: 1002
+== eventchannel decoder: json rule: 1002
+== json decoder: json rule: 1002
+```
+**Proven: `/logtest` cannot run a pasted Windows event through `windows_eventchannel`, whatever
+`log_format` is sent.** A real agent marks its events as eventchannel on the way in; a pasted event
+has no such marker, so the generic `json` decoder claims it. Logtest can unit-test syslog-style
+rules, but **not** rules chained on the Windows decoder, which is all of this project's rules.
+(The 09-02 suspicion, now confirmed three ways.)
+
+*Detours:* netAdmin → `10.50.0.110:55000` **times out** (inter-subnet firewall; left closed — CI only
+needs the workstation to reach it). Ran the test on the manager itself against `127.0.0.1:55000`.
+An empty `$TOKEN` (length 0) meant "no connection", not "wrong password" — a wrong password
+still returns a JSON error.
+
+**Decision: the CI unit step becomes a pre-flight check.** New `ci/rule_loaded.py` asks the manager
+`GET /rules?rule_ids=100201` and fails the build if the rule isn't loaded (never deployed, or the XML
+failed to parse). It proves the manager is reachable, the CI credentials work, and the rule is live —
+fast, before firing anything. It does **not** prove the rule matches; the live atomic plus the indexer
+search (`confirm_alert.py`) is the only real proof for Windows rules. `detect` and the `deploy` job's
+post-deploy check both use it now. `logtest_unit.py` stays in the repo but is out of CI.
+**For the report:** the planned "unit tier" (`/logtest`) turned out impossible for eventchannel rules.
+That's a tooling limitation found by testing, and it makes the integration test the real gate.
+
+**Pick up here:**
+1. Push the pre-flight change; re-run `detect` — the first step should print
+   `[PASS] kerberoasting rule.id 100201 loaded (level 12, local_rules.xml, enabled)`.
+2. Indexer reachable from the workstation; set `WAZUH_INDEXER_URL` (LAN IP, not 127.0.0.1),
+   `WAZUH_INDEXER_USER`, secret `WAZUH_INDEXER_PASSWORD`.
+3. Add `C:\AtomicRedTeam` to the machine `PSModulePath` so `fire_atomic.ps1` finds Invoke-AtomicRedTeam.
+4. Run `detect` end to end → Kerberoasting green in CI (midterm target).

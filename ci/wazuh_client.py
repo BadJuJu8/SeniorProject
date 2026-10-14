@@ -1,6 +1,6 @@
 """Thin clients for the two Wazuh APIs the pipeline uses.
 
-  WazuhManager  -> manager API on 55000: JWT auth + /logtest (unit test).
+  WazuhManager  -> manager API on 55000: JWT auth + /rules (pre-flight) + /logtest.
   WazuhIndexer  -> indexer API on 9200: basic auth + _search (integration test).
 
 Kept dependency-light (requests only) and free of any print/exit so the callers
@@ -88,6 +88,27 @@ class WazuhManager:
         if resp.status_code != 200:
             raise WazuhError(f"/logtest HTTP {resp.status_code}: {resp.text[:300]}")
         return resp.json()["data"]
+
+    def get_rule(self, rule_id: str) -> dict | None:
+        """GET /rules?rule_ids=<id> and return the loaded rule, or None if the
+        manager has no rule with that id (not deployed, or the XML failed to load).
+
+        The returned dict carries id, level, description, filename and status.
+        """
+        try:
+            resp = requests.get(
+                f"{self.url}/rules",
+                params={"rule_ids": rule_id},
+                headers=self._headers,
+                verify=self.verify,
+                timeout=self.timeout,
+            )
+        except requests.RequestException as exc:
+            raise WazuhError(f"/rules request failed: {exc}") from exc
+        if resp.status_code != 200:
+            raise WazuhError(f"/rules HTTP {resp.status_code}: {resp.text[:300]}")
+        items = resp.json()["data"].get("affected_items") or []
+        return items[0] if items else None
 
     @staticmethod
     def matched_rule_id(logtest_data: dict) -> str | None:
