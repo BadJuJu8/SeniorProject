@@ -104,9 +104,13 @@ jobs:
         run: printf '%s\n' "${{ secrets.ANSIBLE_INVENTORY }}" > ansible/inventory.ini
       # ansible.cfg is only read from the current directory, so point at it explicitly
       # (remote_user, SSH key, become).
+      # BatchMode: CI has no keyboard, so fail on a password/passphrase prompt
+      # instead of hanging on it.
       - name: Deploy local_rules.xml + reload the manager
+        timeout-minutes: 10
         env:
           ANSIBLE_CONFIG: ansible/ansible.cfg
+          ANSIBLE_SSH_ARGS: -o BatchMode=yes -o ControlMaster=auto -o ControlPersist=60s
         run: ansible-playbook -i ansible/inventory.ini ansible/deploy-rule.yml
       - name: Post-deploy sanity — the rule loaded after the reload
         run: |

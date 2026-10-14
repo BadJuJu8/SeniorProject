@@ -600,9 +600,25 @@ Reading the job turned up three more: `ansible.cfg` isn't read when running from
 and `ANSIBLE_INVENTORY` (the inventory secret) probably isn't set. Fixed the first three in `detect.yml`
 (dropped vault, `ANSIBLE_CONFIG=ansible/ansible.cfg`, venv).
 
+**MILESTONE — `detect` GREEN in CI (run on `a618d08`, 2026-10-14):** pre-flight passed, the atomic
+fired on `IT-RGARCIA`, and `confirm_alert.py` printed
+`[PASS] Found 1 alert(s) for rule.id=100201 / T1558.003. Most recent 2026-10-14T20:31:36.511+0000:
+Kerberoasting: RC4-HMAC service ticket requested for SPN svc_sql by robert.garcia@ROBSLAB.LOCAL`.
+**A push now fires a real Kerberoasting attack and the build only passes if Wazuh caught it.**
+Midterm target met.
+
+`deploy` (same run) then **hung 8+ minutes** on the first task, `Copy local_rules.xml to the manager`
+— Ansible waiting on a prompt CI can't answer (SSH key passphrase, or sudo password for `become`).
+Cancelled. Test: `ssh -i ~/.ssh/ansible_ed25519 -o BatchMode=yes robert@10.50.0.110 'sudo -n true'`
+→ `Permission denied (publickey,password)`. `ssh -v` showed the manager accepts only the personal
+key `id_ed25519`; the dedicated `ansible_ed25519` key (set in `ansible.cfg`) was never authorized
+there, so SSH fell back to a password prompt and Ansible waited forever. Fix: `ssh-copy-id -i
+~/.ssh/ansible_ed25519.pub robert@10.50.0.110` (keep a separate automation key; don't reuse the
+personal one). Also made CI fail fast instead of hang: `ANSIBLE_SSH_ARGS=-o BatchMode=yes` and
+`timeout-minutes: 10` on the deploy step.
+
 **Pick up here:**
-1. Confirm `detect`'s integration step passed (that's the midterm target, Kerberoasting green in CI).
-2. Set the Gitea secret `ANSIBLE_INVENTORY` (paste the contents of `ansible/inventory.ini`), re-run
-   `deploy`. Likely next snag: `become` needs a sudo password on the manager, which CI can't type —
-   decide between a vaulted `ansible_become_password` and a limited NOPASSWD sudo rule for the
-   deploy user.
+1. Find which prompt `deploy` hangs on (the BatchMode test above) and fix it without weakening more
+   than needed.
+2. (`ANSIBLE_INVENTORY` secret is set — the play started.) If it's sudo: decide between a vaulted
+   `ansible_become_password` and a limited NOPASSWD sudo rule for the deploy user. Then `deploy` green.
