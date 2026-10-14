@@ -103,15 +103,19 @@ jobs:
       - name: Materialize inventory from secrets
         run: printf '%s\n' "${{ secrets.ANSIBLE_INVENTORY }}" > ansible/inventory.ini
       # ansible.cfg is only read from the current directory, so point at it explicitly
-      # (remote_user, SSH key, become).
+      # (remote_user, become). CI swaps in its own key: ansible_ed25519 has a
+      # passphrase for manual runs; ci_deploy_ed25519 has none but the manager only
+      # accepts it from netAdmin (from="10.60.0.100" in authorized_keys).
       # BatchMode: CI has no keyboard, so fail on a password/passphrase prompt
       # instead of hanging on it.
       - name: Deploy local_rules.xml + reload the manager
         timeout-minutes: 10
         env:
           ANSIBLE_CONFIG: ansible/ansible.cfg
-          ANSIBLE_SSH_ARGS: -o BatchMode=yes -o ControlMaster=auto -o ControlPersist=60s
-        run: ansible-playbook -i ansible/inventory.ini ansible/deploy-rule.yml
+          ANSIBLE_SSH_ARGS: -o BatchMode=yes -o IdentitiesOnly=yes -o ControlMaster=auto -o ControlPersist=60s
+        run: |
+          export ANSIBLE_PRIVATE_KEY_FILE="$HOME/.ssh/ci_deploy_ed25519"
+          ansible-playbook -i ansible/inventory.ini ansible/deploy-rule.yml
       - name: Post-deploy sanity — the rule loaded after the reload
         run: |
           python3 -m venv .venv

@@ -622,3 +622,12 @@ personal one). Also made CI fail fast instead of hang: `ANSIBLE_SSH_ARGS=-o Batc
    than needed.
 2. (`ANSIBLE_INVENTORY` secret is set — the play started.) If it's sudo: decide between a vaulted
    `ansible_become_password` and a limited NOPASSWD sudo rule for the deploy user. Then `deploy` green.
+
+**Still denied after `ssh-copy-id` ("keys already exist").** The public key *was* on the manager;
+`ssh-keygen -y -P "" -f ~/.ssh/ansible_ed25519` → `incorrect passphrase supplied` — **the Ansible key
+has a passphrase**, which CI can't type (BatchMode skips the key → denied). Decision: a **separate CI
+deploy key** `~/.ssh/ci_deploy_ed25519` (no passphrase), authorized on the manager with
+`from="10.60.0.100"` so it only works from netAdmin; the personal `ansible_ed25519` keeps its
+passphrase for manual runs. CI selects it via `ANSIBLE_PRIVATE_KEY_FILE` in the deploy step.
+**For the report:** unattended automation needs an unattended credential — compensate for the
+missing passphrase by scoping it (source IP, one user, file perms 600, one purpose).
