@@ -653,3 +653,22 @@ with the old hung deploy (one job at a time) — cancelled it.
 firewall blocks from 55000. Instead of opening that path to the SIEM, moved the check into a new
 `verify-deploy` job on the Windows runner (already allowed). Pipeline is now
 `validate → detect → deploy → verify-deploy`.
+
+**MILESTONE — FULL PIPELINE GREEN (2026-10-14, run on `9c2ca55`): `validate → detect → deploy →
+verify-deploy`, all four jobs passed.** One push now: lints the rules, fires a real Kerberoasting attack
+(ART T1558.003 #5) on the workstation, proves Wazuh raised `100201` via the indexer, deploys
+`local_rules.xml` to the manager with Ansible (CI key + vaulted sudo), and confirms the rule is loaded
+after the deploy. **Phase 6 (CI) is done for Kerberoasting.**
+
+**Pick up here (next session):**
+1. Update your own write-ups: `README.md` and `writeups/kerberoasting.md` still describe a `/logtest`
+   unit test; it's now a rule-loaded pre-flight + the live atomic (see 10-14 above for the why).
+2. Report material from today: logtest can't decode eventchannel events; the machine-account blind
+   spot (LocalSystem runner); unattended credentials (passphrase-less key scoped by `from=`, vaulted
+   sudo); firewall kept closed and the check moved instead; a narrow sudo rule is impossible with
+   Ansible `become`.
+3. Hardening backlog: run both runners as services (Windows one under a domain user, not
+   LocalSystem); read-only indexer user for `confirm_alert.py`; move `act_runner` binary out of the
+   repo folder on netAdmin and gitignore `act_runner`/`.runner`; back up `~/.ansible_vault_pass`.
+4. Next technique: restore one of the parked ones from `_later/` (AS-REP roasting is closest to
+   Kerberoasting) and take it through the same pipeline.
