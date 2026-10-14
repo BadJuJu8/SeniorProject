@@ -122,14 +122,24 @@ jobs:
             -e ansible_ssh_private_key_file="$HOME/.ssh/ci_deploy_ed25519" \
             --vault-password-file "$HOME/.ansible_vault_pass" \
             ansible/deploy-rule.yml
-      - name: Post-deploy sanity — the rule loaded after the reload
-        run: |
-          python3 -m venv .venv
-          .venv/bin/pip install -r ci/requirements.txt
-          .venv/bin/python ci/rule_loaded.py --technique "$TECH"
       - name: Scrub secrets
         if: always()
         run: rm -f ansible/inventory.ini
+
+  # Post-deploy sanity runs on the Windows runner: the firewall only lets the
+  # workstation reach the manager API (55000), not netAdmin. Kept that way
+  # rather than opening another path to the SIEM.
+  verify-deploy:
+    needs: deploy
+    runs-on: windows
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tooling
+        shell: pwsh
+        run: python -m pip install -r ci/requirements.txt
+      - name: Post-deploy sanity — the rule loaded after the reload
+        shell: pwsh
+        run: python ci/rule_loaded.py --technique $env:TECH
 
   # Heatmap job parked with heatmap/ (now _later/heatmap/). Uncomment and move
   # the folder back when you pick the heatmap up.

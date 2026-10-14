@@ -643,3 +643,13 @@ git. CI passes it with `--vault-password-file`.
 Manual dry run still asked for the **`ansible_ed25519` passphrase**: `ANSIBLE_PRIVATE_KEY_FILE` was
 ignored because the key set in the inventory outranks env/config. Fix: pass the CI key as an extra var,
 `-e ansible_ssh_private_key_file=~/.ssh/ci_deploy_ed25519` (extra vars beat everything). CI updated.
+
+**Manual run with `-e`: `ok=3 changed=0 failed=0`** — CI key + vaulted sudo work (no change, so no
+restart). Committed `vault.yml`, pushed. `deploy` sat on *Waiting*: the Linux runner was still busy
+with the old hung deploy (one job at a time) — cancelled it.
+
+**CI run: the Ansible deploy step PASSED in CI.** The post-deploy `/rules` check then failed:
+`Manager unreachable at https://10.50.0.110:55000 ... timed out` — it ran on netAdmin, which the
+firewall blocks from 55000. Instead of opening that path to the SIEM, moved the check into a new
+`verify-deploy` job on the Windows runner (already allowed). Pipeline is now
+`validate → detect → deploy → verify-deploy`.
