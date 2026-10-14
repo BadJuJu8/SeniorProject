@@ -578,10 +578,31 @@ post-deploy check both use it now. `logtest_unit.py` stays in the repo but is ou
 **For the report:** the planned "unit tier" (`/logtest`) turned out impossible for eventchannel rules.
 That's a tooling limitation found by testing, and it makes the integration test the real gate.
 
+**Getting `detect` through on the Windows runner (10-14):**
+- `detect` sat on **Waiting** — the runner is a console process, and its window had been closed.
+  Restarted `.\act_runner.exe daemon`. (A real deployment would make it a service under a domain
+  user, not LocalSystem; see the machine-account note above.)
+- `Cannot find: pwsh in PATH` — the steps use `shell: pwsh` (PowerShell 7); Windows only ships
+  5.1 (`powershell.exe`). Installed PowerShell 7, restarted the runner in a new window to pick up PATH.
+- `The required module 'powershell-yaml' is not loaded` — ART's dependency was installed for 5.1's
+  per-user module folder, which pwsh 7 doesn't search. Fix: `Install-Module powershell-yaml -Scope
+  AllUsers` from an admin pwsh (→ `C:\Program Files\PowerShell\Modules`), and start the runner from
+  pwsh rather than 5.1 so it inherits pwsh's module path.
+- After that the run reached **`deploy`**, which only runs once `detect` passes →
+  **`detect` appears GREEN: pre-flight, live atomic, and indexer confirmation of `100201`.**
+  *(To confirm: read the integration step's final line in the run log.)*
+
+**`deploy` job — first ever run, four problems:**
+`ERROR! Invalid vault password was provided from file .../ansible/.vault_pass`. Nothing in the repo
+is vaulted, and the `ANSIBLE_VAULT_PASS` secret was never set, so an empty password file was passed.
+Reading the job turned up three more: `ansible.cfg` isn't read when running from the repo root (so
+`remote_user`/key/become were ignored), the post-deploy `pip install` would hit PEP 668 on the host,
+and `ANSIBLE_INVENTORY` (the inventory secret) probably isn't set. Fixed the first three in `detect.yml`
+(dropped vault, `ANSIBLE_CONFIG=ansible/ansible.cfg`, venv).
+
 **Pick up here:**
-1. Push the pre-flight change; re-run `detect` — the first step should print
-   `[PASS] kerberoasting rule.id 100201 loaded (level 12, local_rules.xml, enabled)`.
-2. Indexer reachable from the workstation; set `WAZUH_INDEXER_URL` (LAN IP, not 127.0.0.1),
-   `WAZUH_INDEXER_USER`, secret `WAZUH_INDEXER_PASSWORD`.
-3. Add `C:\AtomicRedTeam` to the machine `PSModulePath` so `fire_atomic.ps1` finds Invoke-AtomicRedTeam.
-4. Run `detect` end to end → Kerberoasting green in CI (midterm target).
+1. Confirm `detect`'s integration step passed (that's the midterm target, Kerberoasting green in CI).
+2. Set the Gitea secret `ANSIBLE_INVENTORY` (paste the contents of `ansible/inventory.ini`), re-run
+   `deploy`. Likely next snag: `become` needs a sudo password on the manager, which CI can't type —
+   decide between a vaulted `ansible_become_password` and a limited NOPASSWD sudo rule for the
+   deploy user.

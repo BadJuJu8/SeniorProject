@@ -11,7 +11,7 @@
 #   label `windows` -> Act runner ON the Windows target (fires atomics locally, no remoting)
 #
 # Required Gitea repo config (Settings -> Actions -> Secrets / Variables):
-#   secrets: WAZUH_API_PASSWORD, WAZUH_INDEXER_PASSWORD, ANSIBLE_INVENTORY, ANSIBLE_VAULT_PASS
+#   secrets: WAZUH_API_PASSWORD, WAZUH_INDEXER_PASSWORD, ANSIBLE_INVENTORY
 #   vars:    WAZUH_MANAGER_URL, WAZUH_API_USER, WAZUH_INDEXER_URL, WAZUH_INDEXER_USER
 name: detection-as-code
 
@@ -99,23 +99,23 @@ jobs:
     runs-on: linux
     steps:
       - uses: actions/checkout@v4
-      - name: Materialize inventory + vault password from secrets
-        run: |
-          printf '%s' "${{ secrets.ANSIBLE_INVENTORY }}" > ansible/inventory.ini
-          printf '%s' "${{ secrets.ANSIBLE_VAULT_PASS }}" > ansible/.vault_pass
-          chmod 600 ansible/.vault_pass
+      # No Ansible Vault yet: nothing in the repo is encrypted, so no vault password.
+      - name: Materialize inventory from secrets
+        run: printf '%s\n' "${{ secrets.ANSIBLE_INVENTORY }}" > ansible/inventory.ini
+      # ansible.cfg is only read from the current directory, so point at it explicitly
+      # (remote_user, SSH key, become).
       - name: Deploy local_rules.xml + reload the manager
-        run: |
-          ansible-playbook -i ansible/inventory.ini \
-            --vault-password-file ansible/.vault_pass \
-            ansible/deploy-rule.yml
+        env:
+          ANSIBLE_CONFIG: ansible/ansible.cfg
+        run: ansible-playbook -i ansible/inventory.ini ansible/deploy-rule.yml
       - name: Post-deploy sanity — the rule loaded after the reload
         run: |
-          pip install -r ci/requirements.txt
-          python ci/rule_loaded.py --technique "$TECH"
+          python3 -m venv .venv
+          .venv/bin/pip install -r ci/requirements.txt
+          .venv/bin/python ci/rule_loaded.py --technique "$TECH"
       - name: Scrub secrets
         if: always()
-        run: rm -f ansible/.vault_pass ansible/inventory.ini
+        run: rm -f ansible/inventory.ini
 
   # Heatmap job parked with heatmap/ (now _later/heatmap/). Uncomment and move
   # the folder back when you pick the heatmap up.
