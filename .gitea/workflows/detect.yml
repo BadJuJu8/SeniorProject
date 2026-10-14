@@ -115,9 +115,11 @@ jobs:
         env:
           ANSIBLE_CONFIG: ansible/ansible.cfg
           ANSIBLE_SSH_ARGS: -o BatchMode=yes -o IdentitiesOnly=yes -o ControlMaster=auto -o ControlPersist=60s
+        # -e, not ANSIBLE_PRIVATE_KEY_FILE: a key set in the inventory outranks the env
+        # var, but extra vars outrank everything.
         run: |
-          export ANSIBLE_PRIVATE_KEY_FILE="$HOME/.ssh/ci_deploy_ed25519"
           ansible-playbook -i ansible/inventory.ini \
+            -e ansible_ssh_private_key_file="$HOME/.ssh/ci_deploy_ed25519" \
             --vault-password-file "$HOME/.ansible_vault_pass" \
             ansible/deploy-rule.yml
       - name: Post-deploy sanity — the rule loaded after the reload

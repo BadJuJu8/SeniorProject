@@ -639,3 +639,7 @@ needs a secret. **Decision: Ansible Vault.** `ansible_become_password` encrypted
 `ansible/group_vars/wazuh_manager/vault.yml` (committed — it's ciphertext); the vault password is a
 random 32-byte string in `~/.ansible_vault_pass` (mode 600) on netAdmin, next to the SSH key, never in
 git. CI passes it with `--vault-password-file`.
+
+Manual dry run still asked for the **`ansible_ed25519` passphrase**: `ANSIBLE_PRIVATE_KEY_FILE` was
+ignored because the key set in the inventory outranks env/config. Fix: pass the CI key as an extra var,
+`-e ansible_ssh_private_key_file=~/.ssh/ci_deploy_ed25519` (extra vars beat everything). CI updated.
