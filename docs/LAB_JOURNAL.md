@@ -672,3 +672,72 @@ after the deploy. **Phase 6 (CI) is done for Kerberoasting.**
    repo folder on netAdmin and gitignore `act_runner`/`.runner`; back up `~/.ansible_vault_pass`.
 4. Next technique: restore one of the parked ones from `_later/` (AS-REP roasting is closest to
    Kerberoasting) and take it through the same pipeline.
+
+### 2026-10-14 (later) — Design decision: fix the detect-before-deploy ordering flaw
+
+**The flaw.** `detect` runs before `deploy`, so the attack is judged by the rule *already on the
+manager*, not the one in the commit. A commit that silently breaks 100201 (e.g. a regex typo) would
+still go green, then get deployed. The pre-flight has the same blind spot: it proves *a* 100201 is
+loaded, not *this commit's* 100201.
+
+**Options weighed.**
+1. *Staging manager* — the real-world answer, but a Wazuh agent reports to one manager (multiple
+   `<server>` blocks = failover, not fan-out), so the DC's 4769s can't reach a second manager without
+   repointing the DC agent (production goes blind to the DC meanwhile) or a WEF collector VM (no RAM
+   on 16 GB). Two managers on one VM isn't practical either (fixed `/var/ossec`, ports 1514/1515/55000).
+2. *Deploy candidate first, roll back on failure* — simple, but a possibly-silent rule *replaces* the
+   trusted one for a few minutes.
+3. *Checksum guard* — makes the flaw visible, doesn't fix it.
+
+**How a SOC frames it.** Lifecycle: peer review → offline tests → attack sim in a test environment →
+production in non-paging monitor mode → promote. Unproven rules do run in production; what's avoided
+is *replacing* a trusted rule with an unproven one. The bar: **the trusted detection never stops
+working.** My whole lab is effectively the "test environment" tier.
+
+**Chosen: additive candidate (shadow deploy), promote only after detect passes.** The commit's rule
+is staged next to the live one under a separate candidate ID, as a child (`<if_sid>100201`) so both
+can't compete for the same event (Wazuh = one alert per event, deepest match wins). The attack must
+fire the *candidate* ID; only then is the real `local_rules.xml` deployed. Known limit: as a child,
+the candidate only sees events the live rule already caught — fine for the regression claim ("the
+commit's rule still catches the known attack"), but it can't prove *new* coverage of a widened rule.
+
+**The concrete design (agreed, not built yet):**
+- **Candidate in its own file.** Wazuh loads every file in `/var/ossec/etc/rules/`, so the candidate
+  goes in `local_rules_candidate.xml`; production `local_rules.xml` is untouched until `detect` passes.
+  *Stage* = copy candidate + restart. *Promote* = deploy the real `local_rules.xml` + delete the
+  candidate. *Abort* = delete the candidate. Rollback is "delete one file".
+- **Always child mode** (`<if_sid>100201</if_sid>`). CI's claim is "the commit's rule still catches the
+  known attack" (ART #5 = RC4 roast, already caught by live 100201) — child mode proves exactly that.
+  Proving *new* coverage needs a new attack anyway.
+- **Pipeline:**
+  ```
+  validate ─► stage-candidate ─► detect ─► promote ─► verify-deploy
+   (linux)       (linux)        (windows)  (linux)     (windows)
+                                   └─ on failure ─► discard-candidate
+  ```
+  `detect`'s pre-flight and `confirm_alert.py` look for the **candidate** ID, not 100201.
+
+**Who builds what:**
+- *Claude scaffolds (CI glue):* `ci/make_candidate.py` (reads the commit's rule, gives it the candidate
+  ID, swaps `if_group` → `<if_sid>100201</if_sid>`, adds a `candidate` group, writes
+  `local_rules_candidate.xml`) + an offline test; candidate-ID support in `rule_loaded.py` /
+  `confirm_alert.py`.
+- *I write (graded):* `ansible/stage-candidate.yml` (copy → `analysisd -t` → rescue: remove → restart —
+  same shape as `deploy-rule.yml`); a "remove the candidate file" task in `deploy-rule.yml`;
+  `ansible/discard-candidate.yml`.
+- *Together:* wire the new jobs into `detect.yml`.
+
+**Pick up here (next session) — 3 checks on the manager first (`ssh` from netAdmin to `10.50.0.110`):**
+1. `sudo grep -A3 '<ruleset>' /var/ossec/etc/ossec.conf` → confirm `<rule_dir>etc/rules</rule_dir>`
+   (what makes the separate-file approach work).
+2. **Load order (the make-or-break experiment):** hand-write a child rule (any free ID,
+   `<if_sid>100201</if_sid>`) into `/var/ossec/etc/rules/local_rules_candidate.xml`, run
+   `sudo /var/ossec/bin/wazuh-analysisd -t`. If it complains about a missing `if_sid`, the candidate
+   file has to be renamed to load after `local_rules.xml`. **Remove the test file afterwards.**
+3. Pick the candidate-ID convention (custom range 100000–120000). Proposed: fixed offset,
+   100201 → **110201**. Record it in the manifest so scripts don't hard-code it.
+Then: Claude writes `make_candidate.py`; I write the three playbook pieces.
+
+**Still open from earlier today:** update `README.md` + `writeups/kerberoasting.md` (logtest →
+pre-flight); report limitations (RC4-only/AES evasion, machine-account blind spot, logtest can't decode
+eventchannel); back up `~/.ansible_vault_pass`; ask the advisor whether one technique is enough scope.
