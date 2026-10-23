@@ -39,3 +39,4 @@ Welcome.md
 *.log
 heatmap/navigator_layer.json
 inventory.ini
+act_runner
