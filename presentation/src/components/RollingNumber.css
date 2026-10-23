@@ -1,0 +1,25 @@
+.roll {
+  display: inline-flex;
+  height: 1em;
+  line-height: 1;
+  overflow: hidden;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.roll-col {
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+  position: relative;
+}
+.roll-strip {
+  display: flex;
+  flex-direction: column;
+  will-change: transform;
+}
+.roll-cell {
+  display: block;
+  height: 1em;
+  line-height: 1;
+  width: 0.6em;
+}

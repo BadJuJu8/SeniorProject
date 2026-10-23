@@ -741,3 +741,81 @@ Then: Claude writes `make_candidate.py`; I write the three playbook pieces.
 **Still open from earlier today:** update `README.md` + `writeups/kerberoasting.md` (logtest →
 pre-flight); report limitations (RC4-only/AES evasion, machine-account blind spot, logtest can't decode
 eventchannel); back up `~/.ansible_vault_pass`; ask the advisor whether one technique is enough scope.
+
+### 2026-10-19 — Midpoint presentation built as a local React deck
+
+**What we did.** Built the 12-slide midpoint presentation as a Vite + React + TypeScript app in
+`presentation/` (content and speaker notes were fixed in the brief; Claude did the visual system,
+motion, presenter tooling and verification). Run with `cd presentation; npm run dev`, then `F` for
+fullscreen and `S` for the presenter window. `presentation/README.md` has the full key list.
+
+**What it is.** Fixed 1920 x 1080 stage scaled to any window. Dark "instrument panel" look: Instrument
+Serif headlines, Inter body, JetBrains Mono for ids/ports/log lines; one 96px grid texture, 1px rules
+instead of boxes. Signature pieces: `LabMap` (four hosts, connectors, a dot that travels
+workstation→DC→Wazuh once on entry), `PipelineStrip` (validate→detect→deploy→verify-deploy lighting up
+green, or halting at detect on the "today" row of slide 6), `RollingNumber` (60106 → 100201),
+`Typewriter` for the `[PASS]` line, `BigStat` for 30/30 and 0/3. Presenter window shows notes at 32px,
+the next slide, an elapsed timer and each slide's time window (orange + "OVER" past the end).
+`/?print` stacks all slides at 1920 x 1080 for a Ctrl+P PDF backup.
+
+**Verified** with Playwright (`npm run verify`): every slide screenshotted at 1920 x 1080 and 1366 x 768
+with all fragments, DOM audit for text below y=984 / past margins / overflow / label-connector
+crossings / non-token colours, contrast of every text colour vs bg and panel (lowest is muted at 6.4:1),
+a full keyboard walk through all 25 positions and back, digit jumps, reload-to-same-fragment, Esc
+overview, `?`, `B`, `F`, click halves, presenter sync both directions, timer, 12-page print at exactly
+1920 x 1080 with zero running animations, reduced-motion instant states. 73 checks, all green.
+
+**Two things the brief could not have as written.** (1) The cover headline at 136px needs four lines,
+not two; kept 136px and let it draw in line by line. (2) The jobs caption under slide 3's strip is 128
+mono characters, which is 1843px at 24px, wider than the 1664px content width, so it wraps to two lines.
+Slide 4 falls back to the text version because `public/screenshots/` has no PNGs yet; dropping
+`ci-log.png` / `wazuh-alert.png` there and restarting the dev server swaps the real images in.
+
+**Why this matters for the project.** The deck is the midpoint deliverable the pipeline work feeds. It
+states the honest status (detect-before-deploy flaw, candidate 110201 fix) exactly as decided on 10-14,
+so the next engineering session still starts at the three manager checks in the 10-14 "Pick up here".
+
+**2026-10-19 (later) - Deck text shortened for a lay audience.** Slides 1-7 on-screen text cut to one idea each, with plain-English lines for SIEM and Kerberoasting; IPs, ports and rule internals removed from slide 3 (backup slides 9-12 unchanged). Speaker notes were left verbatim and are now longer than the slides, so trim them to match before presenting. `npm run verify` still passes.
+
+**2026-10-19 (reorder for a lay audience).** Added a "What I used" slide (new slide 2) that introduces Active Directory, the SIEM, Atomic Red Team and the CI/CD pipeline one at a time before the problem is shown, so the later slides' "alarm / attack / pipeline" words already mean something. New order is Title, What I used, Problem, What I built, Proof, Lessons, Flaw, Next, then the four backup slides, for 13 total. The lessons slide was cut from two stats to one (dropped the 0/3 "shortcut test" column; it stays in the notes and backup slide 12) because it needed jargon to explain. Speaker notes for slides 1-8 were rewritten in plain English and the time windows re-timed to still total 5:00 (new slide takes 0:15-0:55; everything after shifts). These are drafts for the user to edit. `npm run verify` passes (now 13 print pages, overview is a 5-wide grid).
+
+### 2026-10-19 (later) — Re-verified the logtest limitation: it is documented upstream behaviour
+
+**Why we looked again.** Revisiting the CI ordering-flaw reasoning, I questioned the 10-14 claim that
+`/logtest` simply "can't" unit-test the Kerberoasting rule. Re-read the harness and the sample before
+deciding to re-run.
+
+**Two things from re-reading the harness.** (1) `ci/wazuh_client.py` already sends
+`log_format: windows_eventchannel`, `location: EventChannel` by default — so the 10-14 result was "asked
+for the Windows decoder and still got `json`," the strong form, not a wrong-format mistake. (2)
+`tests/samples/4769_kerberoast.json` is the *post-decode* shape (`win.system.*` / `win.eventdata.*`), i.e.
+the decoder's output, not the raw wire event — which first looked like the likely culprit.
+
+**Confirmed against upstream docs/threads — the finding stands, with a sharper reason.** The
+`windows_eventchannel` decoder is **compiled into Wazuh**, not an XML decoder, and `logtest` only
+exercises XML decoders/rules. So a pasted Windows event is claimed by the generic **`json`** decoder *by
+design*. The `json` decoder still extracts the `win.*` fields, but the base Windows rule **60000**
+(`0575-win-base_rules.xml`) — which every eventchannel rule chains off via the compiled `decoded_as` —
+never fires, so it never attaches `windows_security`, so `100201` (hanging off `if_group
+windows_security`) is never evaluated. `decoder: json` is therefore *expected*; no input fix changes it.
+(Wazuh mailing list 2022 + issues #36029, #36291 — verify against our exact version.)
+
+**The only way to make logtest fire the rule is a hack that breaks our own rule.** Documented workaround:
+temporarily edit base rule 60000 to `decoded_as json`, logtest, then revert. On our setup that edit lands
+on the **single production manager**, and while in effect it blinds *all* Windows detection (everything
+chains off 60000) — exactly the "never degrade the trusted detection" sin the candidate design avoids. A
+faithful logtest unit test would need a throwaway manager we don't have. So the conclusion sharpens from
+"logtest is limited" to **"logtest cannot *safely* unit-test this rule here; the live atomic + indexer
+search is the only real proof"** — a second, independent argument for the integration-test gate. This
+*strengthens* the 10-14 decision, it does not overturn it. Report material.
+
+**To optionally see it locally (credential-free):** on the manager, `sudo /var/ossec/bin/wazuh-logtest -v`
+and paste a 4769's `full_log` (grab one from `/var/ossec/logs/alerts/alerts.json`) → expect decoder
+`json`, `win.*` fields extracted, custom rule not firing. Or via the existing harness where
+`WAZUH_API_PASSWORD` is set: `WAZUH_MANAGER_URL=https://10.50.0.110:55000 python ci/logtest_unit.py
+--technique kerberoasting` (prints decoder + groups on the miss). *Not yet re-run this session — the
+confirmation above is from the docs/threads, not a fresh capture.*
+
+**Next still:** the ordering-flaw fix (candidate 110201) and its 3 manager checks remain the pick-up.
+
+**2026-10-19 (understanding — what netAdmin does).** Coaching session, no code changed. Walked through the netAdmin role for the presentation: netAdmin = the Gitea LXC at `10.60.0.100`, wearing two hats — the Gitea server (receives pushes, triggers the workflow, hands jobs to the Windows runner that polls it) and the `linux` Act runner. Of the four `detect.yml` jobs it runs two: `validate` (sigma check + offline pytest) and `deploy` (ansible → manager `10.50.0.110`, reload); the live attack (`detect`) and `verify-deploy` run on the Windows box because the atomic must fire locally on a Windows target. Framed slide 4's "runs the tests" as an honest lay simplification — the precise line is "netAdmin is the CI brain: receives the push, runs the safe offline checks, hands off the live-attack job, then deploys." Left the user a check-for-understanding (why the attack can't run on netAdmin) rather than ghost-writing the explanation.

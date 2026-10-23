@@ -1,0 +1,284 @@
+/* Per-slide layout. Geometry only; colors and type come from tokens. */
+
+/* 01 cover */
+.cover-headline {
+  margin-bottom: 48px;
+}
+.cover-line {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.06em; /* keep descenders inside the clip */
+  margin-bottom: -0.06em;
+}
+.cover-line-inner {
+  display: block;
+  white-space: nowrap;
+}
+.cover-sub {
+  max-width: 1500px;
+  text-wrap: balance;
+}
+.cover-name {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  font-size: var(--size-body-sm);
+  line-height: 1;
+  color: var(--text);
+}
+
+/* 02 tools */
+.tools-sub {
+  margin-bottom: 40px;
+  max-width: 1400px;
+}
+.tools-list {
+  margin-top: 4px;
+}
+.tools-row {
+  display: grid;
+  grid-template-columns: 80px 520px 1fr;
+  align-items: baseline;
+  padding: 28px 0;
+  border-bottom: 1px solid var(--line);
+}
+.tools-num {
+  font-size: var(--size-label);
+  color: var(--muted);
+}
+.tools-name {
+  font-size: var(--size-body);
+  color: var(--text);
+}
+.tools-desc {
+  font-size: var(--size-body);
+  line-height: 1.3;
+  color: var(--muted);
+}
+
+/* 03 problem */
+.problem-cols {
+  display: grid;
+  grid-template-columns: 800px 1fr;
+  column-gap: 96px;
+}
+.problem-left {
+  display: flex;
+  flex-direction: column;
+}
+.problem-steps {
+  margin-top: 16px;
+}
+.problem-step {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  align-items: baseline;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--size-body);
+  line-height: 1.25;
+}
+.problem-step-num {
+  font-size: var(--size-label);
+  color: var(--muted);
+}
+.problem-define {
+  margin-top: 40px;
+  font-size: var(--size-body-sm);
+  line-height: 1.3;
+  color: var(--muted);
+}
+.problem-define .mono {
+  color: var(--text);
+}
+.problem-kicker {
+  margin-bottom: 8px;
+}
+.problem-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.problem-number {
+  font-size: var(--size-stat);
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+}
+.problem-label {
+  color: var(--text);
+  line-height: 1.2;
+  transition: color var(--dur) ease-out, text-decoration-color var(--dur) ease-out;
+  text-decoration: line-through;
+  text-decoration-color: transparent;
+}
+.problem-label--struck {
+  color: var(--muted);
+  text-decoration-color: var(--muted);
+}
+.problem-label--new {
+  color: var(--accent);
+  text-decoration: none;
+}
+.problem-sub {
+  display: grid;
+  margin-top: 8px;
+  line-height: 1.3;
+}
+.problem-sub > * {
+  grid-area: 1 / 1;
+  line-height: 1.3;
+}
+
+/* 03 built */
+.built-pipeline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+.built-jobs {
+  margin-top: 12px;
+  line-height: 1.25;
+}
+.built .headline {
+  margin-bottom: 32px;
+}
+
+/* 04 proof */
+.proof-panels {
+  display: grid;
+  grid-template-columns: 800px 1fr;
+  column-gap: 32px;
+}
+.proof-title {
+  margin-bottom: 16px;
+}
+.proof-box {
+  height: 480px;
+  overflow: hidden;
+}
+.proof-shot {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: left top;
+}
+.proof-pass {
+  font-size: var(--size-body);
+  line-height: 1.35;
+}
+.proof-recent {
+  margin-top: 28px;
+  font-size: var(--size-body-sm);
+  line-height: 1.4;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.proof-firedtimes {
+  font-size: var(--size-h2);
+  line-height: 1;
+  font-weight: 500;
+}
+.proof-box .table-row {
+  padding: 8px 0;
+}
+.proof-box .table-row:first-child .table-cell:first-child,
+.proof-box .table-cell:first-child {
+  color: var(--muted);
+}
+
+/* 06 lessons */
+.lessons-col {
+  display: flex;
+  flex-direction: column;
+  max-width: 1100px;
+  margin-top: 8px;
+}
+.lessons-sub {
+  font-family: var(--font-serif);
+  font-size: var(--size-h2);
+  line-height: 1.15;
+  margin: 32px 0 20px;
+}
+.lessons-body {
+  line-height: 1.35;
+}
+
+/* 06 flaw */
+.flaw-body {
+  margin-bottom: 64px;
+}
+.flaw-row {
+  margin-bottom: 72px;
+}
+.flaw-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 24px;
+}
+.flaw-row--planned {
+  margin-bottom: 56px;
+}
+.flaw-planned-body {
+  max-width: 1500px;
+}
+
+/* 07 next */
+.next-cols {
+  display: grid;
+  grid-template-columns: 900px 1fr;
+  column-gap: 96px;
+}
+.next-scope {
+  font-size: var(--size-col);
+  line-height: 1.4;
+  margin: 0 0 32px;
+}
+.next-limits-text {
+  font-size: var(--size-table);
+  line-height: 1.35;
+  margin: 16px 0 0;
+}
+.next-list {
+  list-style: none;
+  margin: 24px 0 0;
+  padding: 0;
+  font-size: var(--size-table);
+  line-height: 1.3;
+}
+.next-item li {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.next-item:last-of-type li {
+  border-bottom: 0;
+}
+.next-close {
+  font-family: var(--font-serif);
+  font-size: var(--size-h2);
+  line-height: 1.15;
+  margin-top: 40px;
+}
+
+/* 08 backup */
+.backup-block {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 300px;
+}
+
+/* 09-12 tables */
+.footnote {
+  margin-top: 24px;
+  font-size: var(--size-table);
+  line-height: 1.3;
+  color: var(--text);
+}
+.creds-body {
+  margin-bottom: 24px;
+}

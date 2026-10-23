@@ -1,0 +1,63 @@
+.overview {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  padding: 96px var(--margin) 0;
+}
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 307px);
+  grid-auto-rows: auto;
+  column-gap: 32px;
+  row-gap: 40px;
+  justify-content: space-between;
+}
+.overview-cell {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.overview-thumb {
+  width: 307px;
+  height: 173px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  position: relative;
+  background: var(--bg);
+}
+.overview-cell--current .overview-thumb {
+  border-color: var(--accent);
+  outline: 1px solid var(--accent);
+}
+.overview-cell:focus-visible .overview-thumb {
+  outline: 2px solid var(--text);
+}
+.overview-scaled {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.overview-caption {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 12px;
+  font-size: var(--size-label);
+  line-height: 1;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.overview-cell--current .overview-caption {
+  color: var(--text);
+}

@@ -1,0 +1,24 @@
+.table {
+  width: 100%;
+  line-height: 1.2;
+}
+.table-row {
+  display: grid;
+  column-gap: 32px;
+  align-items: start;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.table-head {
+  font-size: var(--size-label);
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  padding: 0 0 12px;
+}
+.table-cell {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.table-cell.mono {
+  letter-spacing: -0.01em;
+}

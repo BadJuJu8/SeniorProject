@@ -1,0 +1,45 @@
+/* The only file that knows a hex value. Every component reads these. */
+:root {
+  --bg: #0B0F14;
+  --panel: #121923;
+  --line: #243041;
+  --text: #ECE9E2;
+  --muted: #8A96A3;
+  --accent: #FF7A1A;
+  --pass: #3DDC97;
+  --fail: #FF4D4D;
+  --black: #000000;
+  --grid-line: rgba(236, 233, 226, 0.05);
+  --scrim: rgba(11, 15, 20, 0.94);
+
+  --font-serif: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+  --font-sans: 'Inter Variable', Inter, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', Consolas, monospace;
+
+  /* type scale on the 1920 stage */
+  --size-display: 136px;
+  --size-h1: 84px;
+  --size-h2: 44px;
+  --size-body: 32px;
+  --size-col: 30px;
+  --size-body-sm: 28px;
+  --size-table: 26px;
+  --size-label: 24px;
+  --size-stat: 160px;
+
+  /* stage geometry */
+  --stage-w: 1920px;
+  --stage-h: 1080px;
+  --margin: 128px;
+  --rule-y: 96px;
+  --content-top: 128px;
+  --bottom-gap: 96px; /* 1080 - 984 */
+  --grid: 96px;
+  --pad: 32px;
+  --radius: 4px;
+
+  /* motion */
+  --dur: 400ms;
+  --dur-fast: 200ms;
+  --stagger: 60ms;
+}
