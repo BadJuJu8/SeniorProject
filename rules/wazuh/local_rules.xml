@@ -39,7 +39,7 @@
   <!-- to stay broad and catch all RC4 roasts.                         -->
   <!-- ============================================================= -->
   <rule id="100201" level="12">
-    <if_group>windows_security</if_group>
+    <if_group>windows_security</if_group
     <field name="win.system.eventID">^4769$</field>
     <field name="win.eventdata.ticketEncryptionType">^0x17$</field>
     <field name="win.eventdata.status">^0x0$</field>
