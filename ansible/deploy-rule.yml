@@ -4,17 +4,24 @@
   gather_facts: false
   vars:
     ossec_rules: /var/ossec/etc/rules/local_rules.xml
+    candidate_rules: /var/ossec/etc/rules/local_rules_candidate.xml
   tasks:
-  - block:  
+  - block:
     - name: Copy local_rules.xml to the manager
-      ansible.builtin.copy: 
+      ansible.builtin.copy:
         src: ../rules/wazuh/local_rules.xml
         dest: "{{ ossec_rules }}"
-        owner: wazuh 
+        owner: wazuh
         group: wazuh
         mode: "0660"
         backup: true
       register: rules_copy
+
+    - name: discard the candidate file when promoting.
+      ansible.builtin.file:
+        path: "{{ candidate_rules }}"
+        state: absent
+      register: candidate_removed
 
     - name: validate the ruleset compiles (wazuh-analysisd -t)
       ansible.builtin.command: /var/ossec/bin/wazuh-analysisd -t
@@ -41,7 +48,7 @@
     ansible.builtin.systemd:
       name: wazuh-manager
       state: restarted
-    when: rules_copy is changed
+    when: rules_copy is changed or candidate_removed is changed
 
   - name: Confirm the manager came back up healthy
     ansible.builtin.command: /var/ossec/bin/wazuh-control status
@@ -52,4 +59,4 @@
   - name: Report
     ansible.builtin.debug:
       msg: "Rules deployed and manager reloaded. analysisd status OK."
-    when: rules_copy is changed
+    when: rules_copy is changed or candidate_removed is changed
