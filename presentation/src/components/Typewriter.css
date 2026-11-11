@@ -1,0 +1,32 @@
+.tw {
+  position: relative;
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.tw-ghost {
+  visibility: hidden;
+}
+.tw-live {
+  position: absolute;
+  inset: 0;
+}
+.tw-cursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1em;
+  vertical-align: -0.15em;
+  margin-left: 0.1em;
+  background: currentColor;
+}
+.tw-cursor--blink {
+  animation: tw-blink 1s steps(1, end) 60;
+}
+.tw-cursor--done {
+  animation: none;
+  opacity: 1;
+}
+@keyframes tw-blink {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}

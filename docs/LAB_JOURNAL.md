@@ -653,3 +653,169 @@ with the old hung deploy (one job at a time) — cancelled it.
 firewall blocks from 55000. Instead of opening that path to the SIEM, moved the check into a new
 `verify-deploy` job on the Windows runner (already allowed). Pipeline is now
 `validate → detect → deploy → verify-deploy`.
+
+**MILESTONE — FULL PIPELINE GREEN (2026-10-14, run on `9c2ca55`): `validate → detect → deploy →
+verify-deploy`, all four jobs passed.** One push now: lints the rules, fires a real Kerberoasting attack
+(ART T1558.003 #5) on the workstation, proves Wazuh raised `100201` via the indexer, deploys
+`local_rules.xml` to the manager with Ansible (CI key + vaulted sudo), and confirms the rule is loaded
+after the deploy. **Phase 6 (CI) is done for Kerberoasting.**
+
+**Pick up here (next session):**
+1. Update your own write-ups: `README.md` and `writeups/kerberoasting.md` still describe a `/logtest`
+   unit test; it's now a rule-loaded pre-flight + the live atomic (see 10-14 above for the why).
+2. Report material from today: logtest can't decode eventchannel events; the machine-account blind
+   spot (LocalSystem runner); unattended credentials (passphrase-less key scoped by `from=`, vaulted
+   sudo); firewall kept closed and the check moved instead; a narrow sudo rule is impossible with
+   Ansible `become`.
+3. Hardening backlog: run both runners as services (Windows one under a domain user, not
+   LocalSystem); read-only indexer user for `confirm_alert.py`; move `act_runner` binary out of the
+   repo folder on netAdmin and gitignore `act_runner`/`.runner`; back up `~/.ansible_vault_pass`.
+4. Next technique: restore one of the parked ones from `_later/` (AS-REP roasting is closest to
+   Kerberoasting) and take it through the same pipeline.
+
+### 2026-10-14 (later) — Design decision: fix the detect-before-deploy ordering flaw
+
+**The flaw.** `detect` runs before `deploy`, so the attack is judged by the rule *already on the
+manager*, not the one in the commit. A commit that silently breaks 100201 (e.g. a regex typo) would
+still go green, then get deployed. The pre-flight has the same blind spot: it proves *a* 100201 is
+loaded, not *this commit's* 100201.
+
+**Options weighed.**
+1. *Staging manager* — the real-world answer, but a Wazuh agent reports to one manager (multiple
+   `<server>` blocks = failover, not fan-out), so the DC's 4769s can't reach a second manager without
+   repointing the DC agent (production goes blind to the DC meanwhile) or a WEF collector VM (no RAM
+   on 16 GB). Two managers on one VM isn't practical either (fixed `/var/ossec`, ports 1514/1515/55000).
+2. *Deploy candidate first, roll back on failure* — simple, but a possibly-silent rule *replaces* the
+   trusted one for a few minutes.
+3. *Checksum guard* — makes the flaw visible, doesn't fix it.
+
+**How a SOC frames it.** Lifecycle: peer review → offline tests → attack sim in a test environment →
+production in non-paging monitor mode → promote. Unproven rules do run in production; what's avoided
+is *replacing* a trusted rule with an unproven one. The bar: **the trusted detection never stops
+working.** My whole lab is effectively the "test environment" tier.
+
+**Chosen: additive candidate (shadow deploy), promote only after detect passes.** The commit's rule
+is staged next to the live one under a separate candidate ID, as a child (`<if_sid>100201`) so both
+can't compete for the same event (Wazuh = one alert per event, deepest match wins). The attack must
+fire the *candidate* ID; only then is the real `local_rules.xml` deployed. Known limit: as a child,
+the candidate only sees events the live rule already caught — fine for the regression claim ("the
+commit's rule still catches the known attack"), but it can't prove *new* coverage of a widened rule.
+
+**The concrete design (agreed, not built yet):**
+- **Candidate in its own file.** Wazuh loads every file in `/var/ossec/etc/rules/`, so the candidate
+  goes in `local_rules_candidate.xml`; production `local_rules.xml` is untouched until `detect` passes.
+  *Stage* = copy candidate + restart. *Promote* = deploy the real `local_rules.xml` + delete the
+  candidate. *Abort* = delete the candidate. Rollback is "delete one file".
+- **Always child mode** (`<if_sid>100201</if_sid>`). CI's claim is "the commit's rule still catches the
+  known attack" (ART #5 = RC4 roast, already caught by live 100201) — child mode proves exactly that.
+  Proving *new* coverage needs a new attack anyway.
+- **Pipeline:**
+  ```
+  validate ─► stage-candidate ─► detect ─► promote ─► verify-deploy
+   (linux)       (linux)        (windows)  (linux)     (windows)
+                                   └─ on failure ─► discard-candidate
+  ```
+  `detect`'s pre-flight and `confirm_alert.py` look for the **candidate** ID, not 100201.
+
+**Who builds what:**
+- *Claude scaffolds (CI glue):* `ci/make_candidate.py` (reads the commit's rule, gives it the candidate
+  ID, swaps `if_group` → `<if_sid>100201</if_sid>`, adds a `candidate` group, writes
+  `local_rules_candidate.xml`) + an offline test; candidate-ID support in `rule_loaded.py` /
+  `confirm_alert.py`.
+- *I write (graded):* `ansible/stage-candidate.yml` (copy → `analysisd -t` → rescue: remove → restart —
+  same shape as `deploy-rule.yml`); a "remove the candidate file" task in `deploy-rule.yml`;
+  `ansible/discard-candidate.yml`.
+- *Together:* wire the new jobs into `detect.yml`.
+
+**Pick up here (next session) — 3 checks on the manager first (`ssh` from netAdmin to `10.50.0.110`):**
+1. `sudo grep -A3 '<ruleset>' /var/ossec/etc/ossec.conf` → confirm `<rule_dir>etc/rules</rule_dir>`
+   (what makes the separate-file approach work).
+2. **Load order (the make-or-break experiment):** hand-write a child rule (any free ID,
+   `<if_sid>100201</if_sid>`) into `/var/ossec/etc/rules/local_rules_candidate.xml`, run
+   `sudo /var/ossec/bin/wazuh-analysisd -t`. If it complains about a missing `if_sid`, the candidate
+   file has to be renamed to load after `local_rules.xml`. **Remove the test file afterwards.**
+3. Pick the candidate-ID convention (custom range 100000–120000). Proposed: fixed offset,
+   100201 → **110201**. Record it in the manifest so scripts don't hard-code it.
+Then: Claude writes `make_candidate.py`; I write the three playbook pieces.
+
+**Still open from earlier today:** update `README.md` + `writeups/kerberoasting.md` (logtest →
+pre-flight); report limitations (RC4-only/AES evasion, machine-account blind spot, logtest can't decode
+eventchannel); back up `~/.ansible_vault_pass`; ask the advisor whether one technique is enough scope.
+
+### 2026-10-19 — Midpoint presentation built as a local React deck
+
+**What we did.** Built the 12-slide midpoint presentation as a Vite + React + TypeScript app in
+`presentation/` (content and speaker notes were fixed in the brief; Claude did the visual system,
+motion, presenter tooling and verification). Run with `cd presentation; npm run dev`, then `F` for
+fullscreen and `S` for the presenter window. `presentation/README.md` has the full key list.
+
+**What it is.** Fixed 1920 x 1080 stage scaled to any window. Dark "instrument panel" look: Instrument
+Serif headlines, Inter body, JetBrains Mono for ids/ports/log lines; one 96px grid texture, 1px rules
+instead of boxes. Signature pieces: `LabMap` (four hosts, connectors, a dot that travels
+workstation→DC→Wazuh once on entry), `PipelineStrip` (validate→detect→deploy→verify-deploy lighting up
+green, or halting at detect on the "today" row of slide 6), `RollingNumber` (60106 → 100201),
+`Typewriter` for the `[PASS]` line, `BigStat` for 30/30 and 0/3. Presenter window shows notes at 32px,
+the next slide, an elapsed timer and each slide's time window (orange + "OVER" past the end).
+`/?print` stacks all slides at 1920 x 1080 for a Ctrl+P PDF backup.
+
+**Verified** with Playwright (`npm run verify`): every slide screenshotted at 1920 x 1080 and 1366 x 768
+with all fragments, DOM audit for text below y=984 / past margins / overflow / label-connector
+crossings / non-token colours, contrast of every text colour vs bg and panel (lowest is muted at 6.4:1),
+a full keyboard walk through all 25 positions and back, digit jumps, reload-to-same-fragment, Esc
+overview, `?`, `B`, `F`, click halves, presenter sync both directions, timer, 12-page print at exactly
+1920 x 1080 with zero running animations, reduced-motion instant states. 73 checks, all green.
+
+**Two things the brief could not have as written.** (1) The cover headline at 136px needs four lines,
+not two; kept 136px and let it draw in line by line. (2) The jobs caption under slide 3's strip is 128
+mono characters, which is 1843px at 24px, wider than the 1664px content width, so it wraps to two lines.
+Slide 4 falls back to the text version because `public/screenshots/` has no PNGs yet; dropping
+`ci-log.png` / `wazuh-alert.png` there and restarting the dev server swaps the real images in.
+
+**Why this matters for the project.** The deck is the midpoint deliverable the pipeline work feeds. It
+states the honest status (detect-before-deploy flaw, candidate 110201 fix) exactly as decided on 10-14,
+so the next engineering session still starts at the three manager checks in the 10-14 "Pick up here".
+
+**2026-10-19 (later) - Deck text shortened for a lay audience.** Slides 1-7 on-screen text cut to one idea each, with plain-English lines for SIEM and Kerberoasting; IPs, ports and rule internals removed from slide 3 (backup slides 9-12 unchanged). Speaker notes were left verbatim and are now longer than the slides, so trim them to match before presenting. `npm run verify` still passes.
+
+**2026-10-19 (reorder for a lay audience).** Added a "What I used" slide (new slide 2) that introduces Active Directory, the SIEM, Atomic Red Team and the CI/CD pipeline one at a time before the problem is shown, so the later slides' "alarm / attack / pipeline" words already mean something. New order is Title, What I used, Problem, What I built, Proof, Lessons, Flaw, Next, then the four backup slides, for 13 total. The lessons slide was cut from two stats to one (dropped the 0/3 "shortcut test" column; it stays in the notes and backup slide 12) because it needed jargon to explain. Speaker notes for slides 1-8 were rewritten in plain English and the time windows re-timed to still total 5:00 (new slide takes 0:15-0:55; everything after shifts). These are drafts for the user to edit. `npm run verify` passes (now 13 print pages, overview is a 5-wide grid).
+
+### 2026-10-19 (later) — Re-verified the logtest limitation: it is documented upstream behaviour
+
+**Why we looked again.** Revisiting the CI ordering-flaw reasoning, I questioned the 10-14 claim that
+`/logtest` simply "can't" unit-test the Kerberoasting rule. Re-read the harness and the sample before
+deciding to re-run.
+
+**Two things from re-reading the harness.** (1) `ci/wazuh_client.py` already sends
+`log_format: windows_eventchannel`, `location: EventChannel` by default — so the 10-14 result was "asked
+for the Windows decoder and still got `json`," the strong form, not a wrong-format mistake. (2)
+`tests/samples/4769_kerberoast.json` is the *post-decode* shape (`win.system.*` / `win.eventdata.*`), i.e.
+the decoder's output, not the raw wire event — which first looked like the likely culprit.
+
+**Confirmed against upstream docs/threads — the finding stands, with a sharper reason.** The
+`windows_eventchannel` decoder is **compiled into Wazuh**, not an XML decoder, and `logtest` only
+exercises XML decoders/rules. So a pasted Windows event is claimed by the generic **`json`** decoder *by
+design*. The `json` decoder still extracts the `win.*` fields, but the base Windows rule **60000**
+(`0575-win-base_rules.xml`) — which every eventchannel rule chains off via the compiled `decoded_as` —
+never fires, so it never attaches `windows_security`, so `100201` (hanging off `if_group
+windows_security`) is never evaluated. `decoder: json` is therefore *expected*; no input fix changes it.
+(Wazuh mailing list 2022 + issues #36029, #36291 — verify against our exact version.)
+
+**The only way to make logtest fire the rule is a hack that breaks our own rule.** Documented workaround:
+temporarily edit base rule 60000 to `decoded_as json`, logtest, then revert. On our setup that edit lands
+on the **single production manager**, and while in effect it blinds *all* Windows detection (everything
+chains off 60000) — exactly the "never degrade the trusted detection" sin the candidate design avoids. A
+faithful logtest unit test would need a throwaway manager we don't have. So the conclusion sharpens from
+"logtest is limited" to **"logtest cannot *safely* unit-test this rule here; the live atomic + indexer
+search is the only real proof"** — a second, independent argument for the integration-test gate. This
+*strengthens* the 10-14 decision, it does not overturn it. Report material.
+
+**To optionally see it locally (credential-free):** on the manager, `sudo /var/ossec/bin/wazuh-logtest -v`
+and paste a 4769's `full_log` (grab one from `/var/ossec/logs/alerts/alerts.json`) → expect decoder
+`json`, `win.*` fields extracted, custom rule not firing. Or via the existing harness where
+`WAZUH_API_PASSWORD` is set: `WAZUH_MANAGER_URL=https://10.50.0.110:55000 python ci/logtest_unit.py
+--technique kerberoasting` (prints decoder + groups on the miss). *Not yet re-run this session — the
+confirmation above is from the docs/threads, not a fresh capture.*
+
+**Next still:** the ordering-flaw fix (candidate 110201) and its 3 manager checks remain the pick-up.
+
+**2026-10-19 (understanding — what netAdmin does).** Coaching session, no code changed. Walked through the netAdmin role for the presentation: netAdmin = the Gitea LXC at `10.60.0.100`, wearing two hats — the Gitea server (receives pushes, triggers the workflow, hands jobs to the Windows runner that polls it) and the `linux` Act runner. Of the four `detect.yml` jobs it runs two: `validate` (sigma check + offline pytest) and `deploy` (ansible → manager `10.50.0.110`, reload); the live attack (`detect`) and `verify-deploy` run on the Windows box because the atomic must fire locally on a Windows target. Framed slide 4's "runs the tests" as an honest lay simplification — the precise line is "netAdmin is the CI brain: receives the push, runs the safe offline checks, hands off the live-attack job, then deploys." Left the user a check-for-understanding (why the attack can't run on netAdmin) rather than ghost-writing the explanation.
