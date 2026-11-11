@@ -6,6 +6,7 @@
       "attack_id": "T1558.003",
       "sample": "4769_kerberoast.json",
       "expected_rule_id": "100201",
+      "candidate_rule_id": "110201",
       "event_id": "4769",
       "sigma": "rules/sigma/kerberoasting.yml",
       "wazuh": "rules/wazuh/local_rules.xml",

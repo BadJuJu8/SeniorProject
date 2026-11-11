@@ -819,3 +819,128 @@ confirmation above is from the docs/threads, not a fresh capture.*
 **Next still:** the ordering-flaw fix (candidate 110201) and its 3 manager checks remain the pick-up.
 
 **2026-10-19 (understanding — what netAdmin does).** Coaching session, no code changed. Walked through the netAdmin role for the presentation: netAdmin = the Gitea LXC at `10.60.0.100`, wearing two hats — the Gitea server (receives pushes, triggers the workflow, hands jobs to the Windows runner that polls it) and the `linux` Act runner. Of the four `detect.yml` jobs it runs two: `validate` (sigma check + offline pytest) and `deploy` (ansible → manager `10.50.0.110`, reload); the live attack (`detect`) and `verify-deploy` run on the Windows box because the atomic must fire locally on a Windows target. Framed slide 4's "runs the tests" as an honest lay simplification — the precise line is "netAdmin is the CI brain: receives the push, runs the safe offline checks, hands off the live-attack job, then deploys." Left the user a check-for-understanding (why the attack can't run on netAdmin) rather than ghost-writing the explanation.
+
+**2026-11-09 (progress report 2 - facts gathered).** No code changed. Dr. Izaddoost asked for a one-page "done so far / next development" summary, due 11/12, reviewed Fri 11/13. Claude pulled the facts from this journal and the git log (done: lab, Kerberoasting rule 100201, Ansible deploy, four-job CI green on 10-14, midpoint deck; next: candidate 110201 ordering fix, then AS-REP / DCSync / PtH, heatmap, write-ups) and handed them over as bullet points for the user to write up in their own words. The repo shows no pipeline work since 10-19, so the engineering pick-up is unchanged: the three manager checks in the 10-14 "Pick up here".
+
+### 2026-11-11 — The three manager checks for the candidate design: all pass
+
+Run by hand on the manager (`ssh` from netAdmin to `10.50.0.110`). No project files changed.
+
+1. **Rule folder.** `sudo sed -n '/<ruleset>/,/<\/ruleset>/p' /var/ossec/etc/ossec.conf` shows
+   `<rule_dir>etc/rules</rule_dir>` under "User-defined ruleset". Wazuh loads every file in
+   `/var/ossec/etc/rules/`, so a separate candidate file is picked up without touching `ossec.conf`.
+   (The first try, `grep -A3 '<ruleset>'`, only showed the default `ruleset/rules` line: three lines
+   of context stop before the user-defined section.)
+2. **Load order.** A throwaway `local_rules_candidate.xml` with one child rule (id 110999,
+   `<if_sid>100201</if_sid>`) passed `wazuh-analysisd -t`: exit code 0, no warning about a missing
+   parent. The filename `local_rules_candidate.xml` works as is (`.` sorts before `_`, so
+   `local_rules.xml` is read first). Test file removed and `-t` re-run clean; the manager was never
+   restarted, so the test rule was never live.
+3. **Candidate ID.** `grep -rn 'id="1102'` over `etc/rules` and `ruleset/rules` returns nothing, so
+   110201 is free. Convention on the table: live ID + 10000 (100201 → 110201).
+
+**What this does and does not prove.** `-t` proves the ruleset compiles with a child in a second
+file. It does not prove the child fires on a real 4769; the first staged `detect` run proves that.
+
+**Pick up here:** write `ansible/stage-candidate.yml` (mine; same shape as `deploy-rule.yml`: copy,
+`analysisd -t`, rescue removes the file, restart). Claude's `ci/make_candidate.py` is not written
+yet and waits for my go-ahead.
+
+**2026-11-11 (later) - Check 2 is in doubt, re-test needed.** Claude flagged that Wazuh's `<rule_dir>`
+only loads files whose name matches a pattern, and the documented default is `_rules.xml$`.
+`local_rules_candidate.xml` does not end in `_rules.xml`, so the exit code 0 above may only mean the
+test file was ignored, not that the child rule compiled. Not yet confirmed on this manager. Re-test:
+put deliberately broken XML in a file with that name and run `wazuh-analysisd -t` (exit 0 = ignored);
+then repeat with a name that ends in `_rules.xml` and sorts after `local_rules.xml`
+(proposed `zz_candidate_rules.xml`). The candidate filename in the design depends on the result.
+Also merged GitHub into the netAdmin clone; the four Gitea-only test commits only added `act_runner`
+to `.gitignore` and the words "made a change" to the comment at the top of `local_rules.xml`.
+
+**2026-11-11 (later still) - Check 2 stands; the doubt was wrong.** Re-test on the manager: a
+deliberately broken `local_rules_candidate.xml` made `wazuh-analysisd -t` fail with
+`ERROR: (1226): Error reading XML file 'etc/rules/local_rules_candidate.xml'` (exit code 1). So this
+manager does read that filename, and the earlier exit code 0 with the valid child rule was a real
+pass. The same broken file renamed `zz_candidate_rules.xml` failed the same way, so both names are
+read. Decision: keep `local_rules_candidate.xml` as designed on 10-14. Useful side result for the
+report: a broken file in `etc/rules` makes `-t` fail loudly, which is exactly what the
+stage-candidate playbook relies on to catch a bad candidate before any restart. The broken test file
+must be deleted before anything restarts the manager.
+
+### 2026-11-11 (evening) — `ansible/stage-candidate.yml` written and its failure path proven
+
+**What I wrote.** `ansible/stage-candidate.yml` on netAdmin, starting from a copy of `deploy-rule.yml`.
+Differences: the variable points at `/var/ossec/etc/rules/local_rules_candidate.xml` (the playbook
+never references `local_rules.xml`); the copy source is `../build/local_rules_candidate.xml`; no
+`backup: true`; the rescue deletes the candidate (`ansible.builtin.file`, `state: absent`, no `when`)
+instead of restoring a backup; restart and report are gated on `candidate_copy is changed`.
+Syntax check passed. Claude reviewed; I typed it.
+
+**Failure-path test (real run against the manager, CI key + vault password).** With a deliberately
+broken `build/local_rules_candidate.xml`: copy `changed` → `wazuh-analysisd -t` FAILED (rc 1,
+`ERROR: (1226) Error reading XML file 'etc/rules/local_rules_candidate.xml'`) → delete task
+`changed` → fail message. Recap `ok=2 changed=2 failed=1 rescued=1`, no restart task ran. So a bad
+candidate is caught before any restart, removed, and the play fails so CI goes red.
+
+**Why the play must end failed.** A rejected candidate has to stop the pipeline; a play that cleaned
+up and reported success would let `detect` run with no candidate staged.
+
+**Not done yet.** Success path is untested on purpose: a staged test rule would sit on top of live
+100201 until removed, so that test waits for `discard-candidate.yml`. Cosmetic: the copy task is
+still named "Copy local_rules.xml to the manager". Nothing committed on netAdmin yet (new playbook,
+`build/` should be gitignored).
+
+**Pick up here:** write `ansible/discard-candidate.yml` (delete the candidate, `-t`, restart only if
+a file was actually removed, health check). Then the success-path test: stage a valid candidate,
+confirm 110201 is loaded, discard, confirm it is gone. Still open: confirm the +10000 ID convention,
+and say whether Claude writes `ci/make_candidate.py`.
+
+**2026-11-11 (night) - `ansible/discard-candidate.yml` written; "nothing to discard" path proven.**
+I wrote it from a copy of the stage playbook: remove the candidate file (`state: absent`, registered),
+`wazuh-analysisd -t`, restart only when the remove task changed something, health check. Claude's
+review caught one indentation error in the remove task and leftover "stage" wording; I fixed them.
+Real run against the manager with no candidate staged: remove `ok`, validate `ok`, restart
+`skipping`, health check `ok`, recap `ok=3 changed=0 failed=0 skipped=2`. So discard is safe to run
+when there is nothing to remove, and it does not restart the manager for no reason (that is what the
+`when` on the restart buys). Still untested: the path where a candidate really is staged and then
+discarded. That is the next test, and it needs a valid candidate file in `build/`.
+
+**2026-11-11 (night) - Success path: stage then discard, round trip done.** With a valid hand-written
+candidate in `build/local_rules_candidate.xml` (id 110201, level 12, `<if_sid>100201</if_sid>`), I ran
+`stage-candidate.yml`, listed `/var/ossec/etc/rules/` on the manager, ran `discard-candidate.yml`, and
+listed the folder again: the candidate file is gone after discard. (Reported by me; the playbook
+output for these runs was not pasted into the session.) Lesson: `ssh host 'sudo ...'` fails with
+"a terminal is required to read the password"; `ssh -t` gives sudo a terminal.
+
+Both playbooks now have their main paths exercised against the real manager: stage rejects a broken
+candidate and cleans up; stage accepts a valid one; discard removes it; discard is a no-op when
+nothing is staged.
+
+**Pick up here:** (1) add `build/` to `.gitignore`, commit the two playbooks on netAdmin; (2) my
+remaining Ansible piece: a "remove the candidate file" task in `deploy-rule.yml` so promote leaves no
+candidate behind; (3) Claude's pieces, waiting for my yes: `ci/make_candidate.py` and `--candidate`
+support in `rule_loaded.py` / `confirm_alert.py`; (4) together: the new jobs in `detect.yml`.
+
+**2026-11-11 (late) - Claude's two CI pieces written (uncommitted on the Windows clone).**
+I said yes, so Claude wrote the glue the 10-14 plan assigned to it:
+- `ci/make_candidate.py`: reads rule 100201 from the commit's `rules/wazuh/local_rules.xml`, rewrites
+  it as id 110201 with `<if_sid>100201</if_sid>` in place of `if_group`, prefixes the description with
+  `[candidate]`, adds the `candidate` group, and writes `build/local_rules_candidate.xml` (the exact
+  path my `stage-candidate.yml` copies from; `build/` is gitignored). The `<field>` lines are copied
+  untouched, because those are what a commit can break. It refuses a candidate ID that collides with
+  a real rule or is outside 100000-120000.
+- `tests/samples/manifest.json`: new `"candidate_rule_id": "110201"` (live ID + 10000), so no script
+  hard-codes the ID.
+- `ci/rule_loaded.py --candidate` and `ci/confirm_alert.py --candidate`: look for the candidate ID.
+  `confirm_alert.py --candidate` matches on rule.id ONLY. Without the flag it accepts the rule id OR
+  the ATT&CK id, and the candidate carries the same ATT&CK id as live 100201, so a broken candidate
+  would have passed on the live rule's alert. Report material.
+- `ci/test_offline.py`: 4 new tests for the candidate.
+
+**Verified here:** all four scripts compile; the generated file has the expected shape; the same
+assertions as the new tests pass when run with plain Python. **Not verified here:** the pytest suite
+itself (pytest is not installed on the Windows machine and installing it was blocked), and nothing has
+talked to the manager or indexer. First real proof = `validate` in CI and a staged run.
+
+**Pick up here:** commit + push these from Windows, pull on netAdmin; run `python3 ci/make_candidate.py`
+there and stage the generated file with my playbook; then my "remove the candidate" task in
+`deploy-rule.yml`; then the `detect.yml` jobs together.

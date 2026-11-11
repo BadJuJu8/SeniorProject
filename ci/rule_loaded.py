@@ -30,13 +30,21 @@ from wazuh_client import WazuhError, manager_from_config
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--technique", help="only check the manifest case with this technique key")
+    parser.add_argument("--candidate", action="store_true",
+                        help="check the staged candidate rule (manifest candidate_rule_id) "
+                             "instead of the live rule")
     args = parser.parse_args()
+    id_key = "candidate_rule_id" if args.candidate else "expected_rule_id"
 
     cases = config.manifest_cases()
     if args.technique:
         cases = [c for c in cases if c["technique"] == args.technique]
         if not cases:
             raise SystemExit(f"No manifest case for technique '{args.technique}'")
+    if args.candidate:
+        cases = [c for c in cases if c.get("candidate_rule_id")]
+        if not cases:
+            raise SystemExit("No manifest case has a candidate_rule_id")
 
     manager = manager_from_config()
     try:
@@ -48,7 +56,7 @@ def main() -> int:
     failures = 0
     for case in cases:
         tech = case["technique"]
-        rule_id = str(case["expected_rule_id"])
+        rule_id = str(case[id_key])
         try:
             rule = manager.get_rule(rule_id)
         except WazuhError as exc:

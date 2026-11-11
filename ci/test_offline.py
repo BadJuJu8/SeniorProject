@@ -211,3 +211,57 @@ def test_aes_ticket_not_kerberoast():
     ev = _load("4769_kerberoast.json")
     ev["win"]["eventdata"]["ticketEncryptionType"] = "0x12"  # AES256 — not roastable
     assert not rule_matches("100201", ev)
+
+
+# --------------------------------------------------------------------------- #
+# Candidate (shadow deploy): ci/make_candidate.py                             #
+# --------------------------------------------------------------------------- #
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import make_candidate  # noqa: E402
+
+CANDIDATE_CASES = [c for c in CASES if c.get("candidate_rule_id")]
+
+
+def _fields(rule: ET.Element) -> list[tuple]:
+    return [(f.get("name"), f.get("negate"), f.get("type"), f.text) for f in rule.findall("field")]
+
+
+def test_some_case_has_a_candidate_id():
+    assert CANDIDATE_CASES, "no manifest case has a candidate_rule_id"
+
+
+@pytest.mark.parametrize("case", CANDIDATE_CASES, ids=[c["technique"] for c in CANDIDATE_CASES])
+def test_candidate_is_child_of_live_rule_with_same_conditions(case):
+    group = make_candidate.build([case])
+    # Round-trip through text: what gets staged must be well-formed XML.
+    group = ET.fromstring(make_candidate.render(group))
+    rules = group.findall("rule")
+    assert len(rules) == 1
+    cand = rules[0]
+    live = next(r for r in ET.parse(WAZUH_XML).getroot().iter("rule")
+                if r.get("id") == case["expected_rule_id"])
+
+    assert cand.get("id") == case["candidate_rule_id"]
+    assert cand.get("level") == live.get("level")
+    # Exactly one parent condition: the live rule.
+    assert [c.text for c in cand.findall("if_sid")] == [case["expected_rule_id"]]
+    for tag in make_candidate.PARENT_TAGS - {"if_sid"}:
+        assert cand.find(tag) is None, f"candidate still has <{tag}>"
+    # The commit's field conditions are carried over untouched.
+    assert _fields(cand) == _fields(live)
+    assert "candidate" in cand.findtext("group").split(",")
+    assert cand.findtext("description").startswith("[candidate] ")
+
+
+def test_candidate_id_must_not_collide_with_a_real_rule():
+    case = dict(CANDIDATE_CASES[0], candidate_rule_id=CANDIDATE_CASES[0]["expected_rule_id"])
+    with pytest.raises(make_candidate.CandidateError):
+        make_candidate.build([case])
+
+
+def test_candidate_id_must_be_in_custom_range():
+    case = dict(CANDIDATE_CASES[0], candidate_rule_id="99999")
+    with pytest.raises(make_candidate.CandidateError):
+        make_candidate.build([case])

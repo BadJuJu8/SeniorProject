@@ -64,10 +64,22 @@ def main() -> int:
                         help="seconds to keep polling before giving up (default 180)")
     parser.add_argument("--interval", type=int, default=10,
                         help="seconds between polls (default 10)")
+    parser.add_argument("--candidate", action="store_true",
+                        help="require the staged candidate rule (manifest candidate_rule_id) "
+                             "to have fired; needs --technique")
     args = parser.parse_args()
 
     rule_id, attack_id = args.rule_id, args.attack_id
-    if args.technique:
+    if args.candidate:
+        if not args.technique:
+            raise SystemExit("--candidate needs --technique")
+        case = _lookup(args.technique)
+        if not case.get("candidate_rule_id"):
+            raise SystemExit(f"'{args.technique}' has no candidate_rule_id in the manifest")
+        # Rule id ONLY. The candidate carries the same ATT&CK id as the live rule, so
+        # matching on the ATT&CK id would let a live-rule alert pass for a broken candidate.
+        rule_id, attack_id = case["candidate_rule_id"], None
+    elif args.technique:
         case = _lookup(args.technique)
         rule_id = rule_id or case["expected_rule_id"]
         attack_id = attack_id or case["attack_id"]
