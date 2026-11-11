@@ -986,3 +986,59 @@ Gitea 1.23.4 honours a job-level `if: failure()` so discard actually runs when d
 **Pick up here:** commit + push `detect.yml` from Windows, pull on netAdmin, push to Gitea, watch the
 run. Then a deliberate red test: break a `<field>` in the rule on a branch-free throwaway commit,
 confirm detect goes red on 110201, discard runs, and 100201 is still live; then revert.
+
+**MILESTONE 2026-11-11 - candidate pipeline GREEN end to end (reported by me from the Gitea run).**
+`validate → stage-candidate → detect → promote → verify-deploy` all passed on the first run of the
+rewired `detect.yml`. The ordering flaw from 10-14 is closed for the green case: the attack is now
+judged by the commit's rule (staged as 110201), and the real `local_rules.xml` is only deployed after
+that rule fired. Evidence to capture for the report: the `detect` log line
+`[PASS] Found N alert(s) for rule.id=110201`, and `discard-candidate` showing as skipped.
+
+**Still unproven: the red case.** Nothing has shown yet that a broken commit goes red, that
+`discard-candidate` actually runs on Gitea 1.23.4 (`if: failure()`), and that 100201 stays live.
+
+**Pick up here - the red test.** Add one line to rule 100201 that the offline sample satisfies but a
+real roast does not, e.g. `<field name="win.eventdata.ipAddress">10\.10\.50\.25$</field>` (the sample's
+source IP; the live attack comes from 10.20.0.101). `validate` should stay green (this is the kind of
+break offline tests cannot see), `stage-candidate` green, `detect` RED on 110201, `promote` skipped,
+`discard-candidate` runs. Then confirm 100201 is still loaded and revert the commit.
+
+**MILESTONE 2026-11-11 - RED TEST PASSED: a broken commit is stopped before production (reported by me from the Gitea run).**
+I added `<field name="win.eventdata.ipAddress">10\.10\.50\.25$</field>` to rule 100201 and pushed to
+Gitea only. That line matches the saved sample event but not a real roast from 10.20.0.101.
+- `validate`: green. The offline tests could not see the break (the sample still matches).
+- `stage-candidate`: green. The broken rule still compiles and loads as 110201.
+- `detect`: RED at the integration test after the full 240 s; no alert from 110201.
+- `promote`, `verify-deploy`: did not run. The broken rule was never deployed.
+- `discard-candidate`: ran and went green. So Gitea 1.23.4 does honour the job-level `if: failure()`.
+Screenshots taken (job list, `[FAIL]` line).
+
+**Why this is the result that matters.** Before today this exact commit would have gone green: the
+attack would have been caught by the old rule already on the manager, and the broken rule would then
+have been deployed, silently ending Kerberoasting detection. Now the commit's own rule has to catch
+the attack. Report material: a rule that passes every offline test but misses the live attack.
+
+**Still to do:** confirm on the manager that `local_rules_candidate.xml` is gone; `git revert` the red
+commit and push to Gitea; confirm the pipeline is green again. Known limit, unchanged: as a child of
+100201 the candidate can only prove the commit still catches what the live rule catches, not new
+coverage from a widened rule.
+
+**2026-11-11 (close) - Recovery confirmed; ordering-flaw fix is done for Kerberoasting.**
+After the red run, `ls` on the manager showed no `local_rules_candidate.xml` (discard worked). I
+reverted the deliberate break (`git revert`), pushed to Gitea, and the pipeline went fully green
+again. So in one evening the same pipeline has shown: green on a good rule, red on a broken rule with
+the broken rule kept out of production, and green again after the fix.
+
+**Who built what (for the report).** Mine: the three manager checks, `ansible/stage-candidate.yml`,
+`ansible/discard-candidate.yml`, the remove-candidate task and wider restart condition in
+`deploy-rule.yml`, all test runs against the manager, the red test. Claude: `ci/make_candidate.py`,
+the `--candidate` options, the manifest field, the four offline tests, the `detect.yml` rewiring;
+review of my playbooks.
+
+**Pick up here (next session):**
+1. Update the one-page progress report (due 11/12): the ordering fix moves from "next" to "done".
+2. Rewrite my write-ups: `README.md` and `writeups/kerberoasting.md` still describe `/logtest` and the
+   old four-job pipeline.
+3. Ask Dr. Izaddoost on Fri 11/13 whether one technique done thoroughly is enough scope.
+4. Next technique: AS-REP roasting from `_later/` through the same pipeline.
+5. Cosmetic: the copy task in `stage-candidate.yml` is still named "Copy local_rules.xml to the manager".
