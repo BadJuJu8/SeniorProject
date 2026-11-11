@@ -1,0 +1,49 @@
+- name: Stage the candidate rule next to the live rules
+  hosts: wazuh_manager
+  become: true
+  gather_facts: false
+  vars:
+    candidate_rules: /var/ossec/etc/rules/local_rules_candidate.xml
+  tasks:
+  - block:
+    - name: Copy local_rules.xml to the manager
+      ansible.builtin.copy:
+        src: ../build/local_rules_candidate.xml
+        dest: "{{ candidate_rules }}"
+        owner: wazuh
+        group: wazuh
+        mode: "0660"
+      register: candidate_copy
+
+    - name: validate the ruleset compiles (wazuh-analysisd -t)
+      ansible.builtin.command: /var/ossec/bin/wazuh-analysisd -t
+      register: analysisd_test
+      changed_when: false
+      failed_when: analysisd_test.rc != 0
+
+    rescue:
+      - name: delete candidate file after a validation failure
+        ansible.builtin.file:
+          path: "{{ candidate_rules }}"
+          state: absent
+
+      - name: fail the deploy, candidate was rejected and removed. (Ruleset invalid, deleted candidate rule, live rules untouched)
+        ansible.builtin.fail:
+          msg: "wazuh-analysisd -t rejected the candidate rule. The local_rules_candidate.xml has been removed and the manager was NOT reloaded."
+
+  - name: Restart the Wazuh manager to load the new rules
+    ansible.builtin.systemd:
+      name: wazuh-manager
+      state: restarted
+    when: candidate_copy is changed
+
+  - name: Confirm the manager came back up healthy
+    ansible.builtin.command: /var/ossec/bin/wazuh-control status
+    register: wazuh_status
+    changed_when: false
+    failed_when: "'wazuh-analysisd is running' not in wazuh_status.stdout"
+
+  - name: Report
+    ansible.builtin.debug:
+      msg: "Candidate is staged and the manager was reloaded."
+    when: candidate_copy is changed

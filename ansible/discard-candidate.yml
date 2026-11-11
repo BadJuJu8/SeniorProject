@@ -1,0 +1,35 @@
+- name: Discard the candidate rule from next to the lives rules
+  hosts: wazuh_manager
+  become: true
+  gather_facts: false
+  vars:
+    candidate_rules: /var/ossec/etc/rules/local_rules_candidate.xml
+  tasks:
+  - name: remove the candidate rule file
+    ansible.builtin.file:
+      path: "{{ candidate_rules }}"
+      state: absent
+    register: candidate_removed
+
+  - name: validate the ruleset compiles (wazuh-analysisd -t)
+    ansible.builtin.command: /var/ossec/bin/wazuh-analysisd -t
+    register: analysisd_test
+    changed_when: false
+    failed_when: analysisd_test.rc != 0
+
+  - name: Restart the Wazuh manager to remove the rule from wazuh
+    ansible.builtin.systemd:
+      name: wazuh-manager
+      state: restarted
+    when: candidate_removed is changed
+
+  - name: Confirm the manager came back up healthy
+    ansible.builtin.command: /var/ossec/bin/wazuh-control status
+    register: wazuh_status
+    changed_when: false
+    failed_when: "'wazuh-analysisd is running' not in wazuh_status.stdout"
+
+  - name: Report
+    ansible.builtin.debug:
+      msg: "Candidate was removed and the manager was reloaded."
+    when: candidate_removed is changed
