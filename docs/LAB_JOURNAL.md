@@ -944,3 +944,45 @@ talked to the manager or indexer. First real proof = `validate` in CI and a stag
 **Pick up here:** commit + push these from Windows, pull on netAdmin; run `python3 ci/make_candidate.py`
 there and stage the generated file with my playbook; then my "remove the candidate" task in
 `deploy-rule.yml`; then the `detect.yml` jobs together.
+
+**2026-11-11 (late) - Promote path proven by hand: generated candidate staged, then removed by `deploy-rule.yml`.**
+On netAdmin, after pulling Claude's CI pieces: `python3 ci/make_candidate.py` wrote
+`build/local_rules_candidate.xml` (110201, child of 100201, my six `<field>` lines unchanged).
+`stage-candidate.yml` with that generated file: copy `changed`, `-t` `ok`, restart `changed`, healthy,
+`failed=0`. First time a candidate built from my real rule compiled and loaded on the manager.
+
+I then added my last Ansible piece to `deploy-rule.yml`: a `candidate_rules` var, a "discard the
+candidate file when promoting" task inside the block (before `-t`, so the check sees the ruleset as it
+will be after the restart), and the restart now runs when the rule copy OR the candidate removal
+changed. Real run: copy `ok` (rule unchanged), remove `changed`, `-t` `ok`, restart `changed`,
+healthy, `ok=6 changed=2 failed=0`. The restart firing although the copy said `ok` is the point:
+deleting a file does not unload a rule, Wazuh keeps it in memory until restart, so without the wider
+`when` a CI-only commit would have left 110201 live after a "successful" promote.
+
+**State:** every piece of the candidate flow has now been run by hand against the real manager:
+generate, stage (good and broken), discard (staged and not staged), promote. Not yet proven: that an
+attack actually fires 110201 (needs the Windows runner), and none of it is wired into `detect.yml`.
+
+**Pick up here:** commit `deploy-rule.yml` on netAdmin; then rewire `detect.yml` (together):
+validate → stage-candidate → detect (`--candidate`) → promote → verify-deploy, plus discard-candidate
+on failure.
+
+**2026-11-11 (late) - `detect.yml` rewired for the candidate flow (written by Claude, uncommitted, NOT yet run).**
+The `validate` job went green on Gitea with the four new candidate tests. I asked Claude to write the
+workflow change because CI wiring is the part I do not know how to write; I review it. New order:
+`validate → stage-candidate → detect → promote → verify-deploy`, plus `discard-candidate`.
+- `stage-candidate` (netAdmin): `make_candidate.py`, then my `stage-candidate.yml`.
+- `detect` (Windows): same three steps, but the pre-flight and the indexer check use `--candidate`,
+  so the alert has to come from 110201.
+- `promote` (netAdmin): the old `deploy` job renamed; my `deploy-rule.yml` now also removes the candidate.
+- `verify-deploy` (Windows): unchanged.
+- `discard-candidate` (netAdmin): `needs: [stage-candidate, detect, promote]`, `if: failure()`; runs my
+  `discard-candidate.yml`.
+
+**Not verified:** the file could not be YAML-parsed on the Windows machine (no PyYAML), and nothing has
+run. Two things only a real run can show: (1) whether an attack really fires 110201; (2) whether
+Gitea 1.23.4 honours a job-level `if: failure()` so discard actually runs when detect fails.
+
+**Pick up here:** commit + push `detect.yml` from Windows, pull on netAdmin, push to Gitea, watch the
+run. Then a deliberate red test: break a `<field>` in the rule on a branch-free throwaway commit,
+confirm detect goes red on 110201, discard runs, and 100201 is still live; then revert.

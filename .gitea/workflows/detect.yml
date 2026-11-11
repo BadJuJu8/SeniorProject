@@ -1,10 +1,20 @@
 # Detection-as-Code pipeline — the project's centrepiece.
 #
 # On every push that touches a rule, sample, or CI script, this fails the build
-# unless the detection provably fires: first a pre-flight check that the rule is
-# loaded on the manager (/rules), then — for real — by firing the live Atomic Red Team technique and confirming the
-# alert landed in the Wazuh indexer. Only then is the rule deployed and the ATT&CK
-# heatmap regenerated.
+# unless THIS COMMIT's rule provably fires on a real attack.
+#
+#   validate -> stage-candidate -> detect -> promote -> verify-deploy
+#                                    |
+#                                    +-- on failure --> discard-candidate
+#
+# The commit's rule is first staged NEXT TO the live rule as a candidate (its own
+# rule id, a child of the live rule). The live Atomic Red Team technique is fired
+# and the alert must come from the candidate id. Only then is the real
+# local_rules.xml deployed (promote). If anything fails, the candidate is removed
+# and the live rule is left exactly as it was.
+#
+# Why: detect used to run before deploy, so the attack was judged by the rule
+# already on the manager, not the one in the commit (docs/LAB_JOURNAL.md, 2026-10-14).
 #
 # Runner topology (see _later/docs/PLAN.md):
 #   label `linux`   -> host-mode Act runner on the Gitea LXC (has python, ansible, S2AN)
@@ -62,11 +72,41 @@ jobs:
         run: pytest ci/test_offline.py -v
 
   # ---------------------------------------------------------------- #
-  # 2 + 3 + 4. Two-tier detection test against the live lab.         #
+  # 2. Stage this commit's rule as a candidate, next to the live one. #
+  #    make_candidate.py builds it; stage-candidate.yml copies it,    #
+  #    validates (analysisd -t) and reloads. A candidate that does    #
+  #    not compile is removed by the playbook and the job fails.      #
+  # ---------------------------------------------------------------- #
+  stage-candidate:
+    needs: validate
+    runs-on: linux
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the candidate from this commit's rule
+        run: python3 ci/make_candidate.py --technique "$TECH"
+      - name: Materialize inventory from secrets
+        run: printf '%s\n' "${{ secrets.ANSIBLE_INVENTORY }}" > ansible/inventory.ini
+      # Same key / vault / BatchMode setup as the promote job below.
+      - name: Stage the candidate + reload the manager
+        timeout-minutes: 10
+        env:
+          ANSIBLE_CONFIG: ansible/ansible.cfg
+          ANSIBLE_SSH_ARGS: -o BatchMode=yes -o IdentitiesOnly=yes -o ControlMaster=auto -o ControlPersist=60s
+        run: |
+          ansible-playbook -i ansible/inventory.ini \
+            -e ansible_ssh_private_key_file="$HOME/.ssh/ci_deploy_ed25519" \
+            --vault-password-file "$HOME/.ansible_vault_pass" \
+            ansible/stage-candidate.yml
+      - name: Scrub secrets
+        if: always()
+        run: rm -f ansible/inventory.ini
+
+  # ---------------------------------------------------------------- #
+  # 3. Detection test against the live lab, judged by the CANDIDATE. #
   #    pre-flight (/rules) -> fire atomic -> integration (_search)   #
   # ---------------------------------------------------------------- #
   detect:
-    needs: validate
+    needs: stage-candidate
     runs-on: windows
     steps:
       - uses: actions/checkout@v4
@@ -77,24 +117,27 @@ jobs:
       # /logtest can't decode agent-delivered Windows events (a pasted 4769 always
       # lands on the generic json decoder), so it can't unit-test Windows rules.
       # The pre-flight only proves the rule is loaded; the atomic is the real test.
-      - name: Pre-flight — the rule is loaded on the manager
+      - name: Pre-flight — the candidate rule is loaded on the manager
         shell: pwsh
-        run: python ci/rule_loaded.py --technique $env:TECH
+        run: python ci/rule_loaded.py --technique $env:TECH --candidate
 
       - name: Fire the live atomic on this Windows target
         shell: pwsh
         run: ./ci/fire_atomic.ps1 -Technique $env:TECH -GetPrereqs -Cleanup -StartTimeFile "$env:GITHUB_WORKSPACE/atomic_start.txt"
 
-      - name: Integration test — confirm the alert reached the indexer
+      # --candidate: the alert must carry the candidate's rule id. An alert from the
+      # live rule does not count; that would mean the commit's rule did not match.
+      - name: Integration test — confirm the CANDIDATE's alert reached the indexer
         shell: pwsh
         run: |
           $start = (Get-Content "$env:GITHUB_WORKSPACE/atomic_start.txt").Trim()
-          python ci/confirm_alert.py --technique $env:TECH --since $start --timeout 240
+          python ci/confirm_alert.py --technique $env:TECH --candidate --since $start --timeout 240
 
   # ---------------------------------------------------------------- #
-  # 5. Deploy the verified rule to the manager (Ansible).            #
+  # 4. Promote: deploy the verified rule to the manager (Ansible)    #
+  #    and remove the candidate in the same play.                    #
   # ---------------------------------------------------------------- #
-  deploy:
+  promote:
     needs: detect
     runs-on: linux
     steps:
@@ -110,7 +153,7 @@ jobs:
       # The sudo password (ansible_become_password) is vaulted in
       # ansible/group_vars/wazuh_manager/vault.yml. The vault password lives on the
       # runner host like the SSH key: ~/.ansible_vault_pass, mode 600, never in git.
-      - name: Deploy local_rules.xml + reload the manager
+      - name: Deploy local_rules.xml, remove the candidate + reload the manager
         timeout-minutes: 10
         env:
           ANSIBLE_CONFIG: ansible/ansible.cfg
@@ -130,7 +173,7 @@ jobs:
   # workstation reach the manager API (55000), not netAdmin. Kept that way
   # rather than opening another path to the SIEM.
   verify-deploy:
-    needs: deploy
+    needs: promote
     runs-on: windows
     steps:
       - uses: actions/checkout@v4
@@ -140,6 +183,34 @@ jobs:
       - name: Post-deploy sanity — the rule loaded after the reload
         shell: pwsh
         run: python ci/rule_loaded.py --technique $env:TECH
+
+  # ---------------------------------------------------------------- #
+  # On failure: take the candidate off the manager again.            #
+  # Runs when stage-candidate, detect or promote failed. Safe to run #
+  # when nothing is staged: discard-candidate.yml then changes       #
+  # nothing and does not restart the manager.                        #
+  # ---------------------------------------------------------------- #
+  discard-candidate:
+    needs: [stage-candidate, detect, promote]
+    if: ${{ failure() }}
+    runs-on: linux
+    steps:
+      - uses: actions/checkout@v4
+      - name: Materialize inventory from secrets
+        run: printf '%s\n' "${{ secrets.ANSIBLE_INVENTORY }}" > ansible/inventory.ini
+      - name: Remove the candidate + reload the manager
+        timeout-minutes: 10
+        env:
+          ANSIBLE_CONFIG: ansible/ansible.cfg
+          ANSIBLE_SSH_ARGS: -o BatchMode=yes -o IdentitiesOnly=yes -o ControlMaster=auto -o ControlPersist=60s
+        run: |
+          ansible-playbook -i ansible/inventory.ini \
+            -e ansible_ssh_private_key_file="$HOME/.ssh/ci_deploy_ed25519" \
+            --vault-password-file "$HOME/.ansible_vault_pass" \
+            ansible/discard-candidate.yml
+      - name: Scrub secrets
+        if: always()
+        run: rm -f ansible/inventory.ini
 
   # Heatmap job parked with heatmap/ (now _later/heatmap/). Uncomment and move
   # the folder back when you pick the heatmap up.
