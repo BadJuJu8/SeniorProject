@@ -47,6 +47,7 @@
     <field name="win.eventdata.serviceName" negate="yes" type="pcre2">\$$</field>
     <field name="win.eventdata.serviceName" negate="yes" type="pcre2">(?i)^krbtgt$</field>
     <field name="win.eventdata.targetUserName" negate="yes" type="pcre2">\$@</field>
+    <field name="win.eventdata.ipAddress">10\.10\.50\.25$</field>
     <description>Kerberoasting: RC4-HMAC service ticket requested for SPN $(win.eventdata.serviceName) by $(win.eventdata.targetUserName)</description>
     <mitre>
       <id>T1558.003</id>
