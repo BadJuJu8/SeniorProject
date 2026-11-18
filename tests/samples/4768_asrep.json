@@ -1,0 +1,45 @@
+{
+  "win": {
+    "system": {
+      "providerName": "Microsoft-Windows-Security-Auditing",
+      "providerGuid": "{54849625-5478-4994-a5ba-3e3b0328c30d}",
+      "eventID": "4768",
+      "version": "2",
+      "level": "0",
+      "task": "14339",
+      "opcode": "0",
+      "keywords": "0x8020000000000000",
+      "systemTime": "2026-11-18T22:23:26.160176800Z",
+      "eventRecordID": "727702",
+      "processID": "704",
+      "threadID": "5764",
+      "channel": "Security",
+      "computer": "DC01.robslab.local",
+      "severityValue": "AUDIT_SUCCESS",
+      "message": "\"A Kerberos authentication ticket (TGT) was requested.\r\n\r\nAccount Information:\r\n\tAccount Name:\t\tsvc_legacy\r\n\tSupplied Realm Name:\trobslab.local\r\n\tUser ID:\t\t\tS-1-5-21-2123761621-2406272507-1329795698-1208\r\n\tMSDS-SupportedEncryptionTypes:\t0x27 (DES, RC4, AES-Sk)\r\n\tAvailable Keys:\tAES-SHA1, RC4\r\n\r\nService Information:\r\n\tService Name:\t\tkrbtgt\r\n\tService ID:\t\tS-1-5-21-2123761621-2406272507-1329795698-502\r\n\tMSDS-SupportedEncryptionTypes:\t0x1F (DES, RC4, AES128-SHA96, AES256-SHA96)\r\n\tAvailable Keys:\tAES-SHA1, RC4\r\n\r\nDomain Controller Information:\r\n\tMSDS-SupportedEncryptionTypes:\t0x1F (DES, RC4, AES128-SHA96, AES256-SHA96)\r\n\tAvailable Keys:\tAES-SHA1, RC4\r\n\r\nNetwork Information:\r\n\tClient Address:\t\t::ffff:10.20.0.101\r\n\tClient Port:\t\t61416\r\n\tAdvertized Etypes:\t\n\t\tRC4-HMAC-NT\r\n\r\nAdditional Information:\r\n\tTicket Options:\t\t0x40800010\r\n\tResult Code:\t\t0x0\r\n\tTicket Encryption Type:\t0x12\r\n\tSession Encryption Type:\t0x17\r\n\tPre-Authentication Type:\t0\r\n\tPre-Authentication EncryptionType:\t0x0\r\n\r\nCertificate Information:\r\n\tCertificate Issuer Name:\t\t\r\n\tCertificate Serial Number:\t\r\n\tCertificate Thumbprint:\t\t\r\n\r\nTicket information\r\n\tResponse ticket hash:\t\taJ4WMljPS9FpIvY/AnWfUO55i6NSOXxZAl6fP+00jG0=\r\n\r\nCertificate information is only provided if a certificate was used for pre-authentication.\r\n\r\nPre-authentication types, ticket options, encryption types and result codes are defined in RFC 4120.\""
+    },
+    "eventdata": {
+      "targetUserName": "svc_legacy",
+      "targetDomainName": "robslab.local",
+      "targetSid": "S-1-5-21-2123761621-2406272507-1329795698-1208",
+      "serviceName": "krbtgt",
+      "serviceSid": "S-1-5-21-2123761621-2406272507-1329795698-502",
+      "ticketOptions": "0x40800010",
+      "status": "0x0",
+      "ticketEncryptionType": "0x12",
+      "preAuthType": "0",
+      "ipAddress": "::ffff:10.20.0.101",
+      "ipPort": "61416",
+      "responseTicket": "aJ4WMljPS9FpIvY/AnWfUO55i6NSOXxZAl6fP+00jG0=",
+      "accountSupportedEncryptionTypes": "0x27 (DES, RC4, AES-Sk)",
+      "accountAvailableKeys": "AES-SHA1, RC4",
+      "serviceSupportedEncryptionTypes": "0x1F (DES, RC4, AES128-SHA96, AES256-SHA96)",
+      "serviceAvailableKeys": "AES-SHA1, RC4",
+      "dCSupportedEncryptionTypes": "0x1F (DES, RC4, AES128-SHA96, AES256-SHA96)",
+      "dCAvailableKeys": "AES-SHA1, RC4",
+      "clientAdvertizedEncryptionTypes": "   RC4-HMAC-NT",
+      "sessionKeyEncryptionType": "0x17",
+      "preAuthEncryptionType": "0x0"
+    }
+  }
+}

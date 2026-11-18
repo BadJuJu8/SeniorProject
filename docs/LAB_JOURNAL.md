@@ -1060,3 +1060,76 @@ red test, recovery), so there is nothing left to do there.
    `/logtest` and the old four-job pipeline); rename the copy task in `stage-candidate.yml`.
 3. Known limit to keep in mind for new techniques: a candidate is a child of the live rule, so it can
    only fire if the live rule already fires.
+
+### 2026-11-18 (later) - AS-REP roasting: three things broke before the rule could fire
+
+**Goal:** take AS-REP roasting (T1558.004) through the same path as Kerberoasting, starting with a
+hand-fired attack against the rule already on the manager (100211, never live-verified).
+
+**1. The SIEM was down and nobody knew.** The Wazuh VM's disk was 100% full; the manager and indexer
+had been dead since 11-16 (`SQLite: database or disk is full`). Half the virtual disk had never been
+allocated: `lvextend -l +100%FREE -r /dev/ubuntu-vg/ubuntu-lv` took root from 48 GB to 96 GB online.
+The manager then still timed out on start. Cause: a stale `/var/ossec/var/start-script-lock` and stale
+`.pid` files in `/var/ossec/var/run` from the 11-17 boot on a full disk; `wazuh-control` waited on the
+lock until systemd killed it at 45 s. Removing the lock and the stale pid files fixed it. Not yet
+known: what filled the disk (Wazuh logs + queue are under 7 GB). Report material: for two days every
+detection in this project was silently off, and no test told me.
+
+**2. Before removing Splunk** from that VM I backed up the 16 alerts I wrote in Feb 2026, the OPNsense
+field extractions and my search history to `projectideas/splunk-rules-backup` on my PC (outside this repo).
+
+**3. The attack.** `svc_legacy` created with "Do not require Kerberos preauthentication". Atomic
+T1558.004 test 1 (Rubeus `asreproast`). Defender quarantined `rubeus.exe` twice until
+`Add-MpPreference -ExclusionPath C:\AtomicRedTeam` was actually saved (run elevated, then check with
+`Get-MpPreference`). After that: `[+] AS-REQ w/o preauth successful!`
+
+**4. Rule 100211 did not fire, for two separate reasons.**
+- *Structure.* It was still the pre-authored level-0 `<decoded_as>` parent (100210) + `<if_sid>`
+  child, the same shape that failed for Kerberoasting on 09-02. I rewrote it as one level-12 rule on
+  `<if_group>windows_security</if_group>` and deleted 100210. (My first attempt kept `id="100210"
+  level="0"`, which would have matched silently and never alerted.)
+- *A wrong field value.* Even restructured it stayed silent. Auditing was fine ("Kerberos
+  Authentication Service" = Success). Stock Wazuh has no alerting rule for 4768, so the events were
+  arriving and being dropped unseen. Probe: on netAdmin only (not committed) I commented out the
+  `preAuthType` and `ticketEncryptionType` lines so 100211 alerted on every 4768, fired again, and
+  read the real events off the manager:
+
+  | | roast (`svc_legacy`) | my normal logon |
+  |---|---|---|
+  | `preAuthType` | `0` | `2` |
+  | `ticketEncryptionType` | `0x12` | `0x12` |
+  | `sessionKeyEncryptionType` | `0x17` | `0x12` |
+
+  The TGT is encrypted with krbtgt's AES key whatever the client asks for, so
+  `ticketEncryptionType ^0x17$` can never match on this DC. The RC4 that Rubeus requested shows up in
+  `sessionKeyEncryptionType`, a field the newer 4768 format (version 2) adds. The parked sample said
+  `0x17`: it was a made-up fixture, and the rule had been written to match the fixture. (In Event
+  Viewer I first read "Pre-Authentication Type 2"; that was one of my own logons, not the roast.)
+
+**Why this matters for the thesis.** Rule, sample and offline tests all agreed with each other and all
+were wrong about the real event. Only firing the attack showed it. It is the 09-02 lesson again, plus
+a new one: an offline sample has to be a real capture.
+
+**Known limit hit for real.** A candidate is a child of the live rule, so while live 100211 could not
+fire, CI could not have proven a fix. The first working version had to be deployed by hand with
+`deploy-rule.yml`.
+
+**Who did what.** Mine: the account, the attack runs, the Defender exclusion, the disk and manager
+fixes on the VM, the rule rewrite, the probe edit and deploys. Claude: diagnosis over SSH (read-only),
+the Splunk backup copy, moving the parked AS-REP files back, the manifest case (candidate 110211), the
+restored negative test, and replacing the fixture `tests/samples/4768_asrep.json` with the real event
+captured at 22:23 UTC.
+
+**Pick up here:**
+1. Replace the `ticketEncryptionType` line in 100211 (options: `status ^0x0$`, or
+   `sessionKeyEncryptionType ^0x17$`). Until then the offline test for the AS-REP sample fails, which
+   is correct.
+2. On netAdmin: `git checkout rules/wazuh/local_rules.xml` to drop the probe.
+3. Update `rules/sigma/asrep_roasting.yml` to match the rule (it still says `TicketEncryptionType 0x17`).
+4. Commit, push, let the Kerberoasting run promote the file, then run the pipeline from Gitea with
+   technique `asrep_roasting`.
+5. Rewrite `writeups/asrep_roasting.md` (pre-generated, describes the wrong event) and the convention
+   comment at the top of `local_rules.xml` (still describes parent/child).
+6. DCSync (100220/221) and PtH (100230/231) still have the parent/child shape; expect the same failure.
+7. Later: find what filled the VM disk; remove my PC's SSH key from the manager and `robert` from the
+   `wazuh` group when today's work is finished.

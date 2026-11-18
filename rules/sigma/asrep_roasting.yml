@@ -25,7 +25,7 @@ detection:
     selection:
         EventID: 4768
         PreAuthType: '0'               # 0 = pre-authentication NOT required
-        TicketEncryptionType: '0x17'   # RC4-HMAC: crackable offline
+        Status: '0x0'  # RC4-HMAC: crackable offline
     filter:
         TargetUserName: 'krbtgt'
     condition: selection and not filter

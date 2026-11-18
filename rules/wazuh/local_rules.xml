@@ -64,7 +64,7 @@
     <if_group>windows_security</if_group>
     <field name="win.system.eventID">^4768$</field>
     <field name="win.eventdata.preAuthType" type="pcre2">^0$</field>
-    <field name="win.eventdata.ticketEncryptionType" type="pcre2">^0x17$</field>
+    <field name="win.eventdata.status" type="pcre2">^0x0$</field>
     <field name="win.eventdata.targetUserName" negate="yes" type="pcre2">(?i)^krbtgt$</field>
     <description>AS-REP Roasting: pre-auth-disabled account $(win.eventdata.targetUserName) issued an RC4-HMAC TGT</description>
     <mitre>

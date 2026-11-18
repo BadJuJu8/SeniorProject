@@ -213,6 +213,12 @@ def test_aes_ticket_not_kerberoast():
     assert not rule_matches("100201", ev)
 
 
+def test_preauth_required_not_asrep():
+    ev = _load("4768_asrep.json")
+    ev["win"]["eventdata"]["preAuthType"] = "2"   # pre-auth enforced
+    assert not rule_matches("100211", ev)
+
+
 # --------------------------------------------------------------------------- #
 # Candidate (shadow deploy): ci/make_candidate.py                             #
 # --------------------------------------------------------------------------- #
