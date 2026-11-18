@@ -1042,3 +1042,21 @@ review of my playbooks.
 3. Ask Dr. Izaddoost on Fri 11/13 whether one technique done thoroughly is enough scope.
 4. Next technique: AS-REP roasting from `_later/` through the same pipeline.
 5. Cosmetic: the copy task in `stage-candidate.yml` is still named "Copy local_rules.xml to the manager".
+
+### 2026-11-18 - Choosing the next route: more attacks before Terraform or AI
+
+No code changed. I had three routes on the table: Terraform + Ansible for the lab, an AI layer, or
+more attacks. Decision: more attacks first. One detection through the pipeline is a demo; a second
+and third show the method generalizes, and it is the work I can defend line by line. Terraform (one
+Linux guest built from code) comes after that, AI last as an optional extra.
+
+We also re-checked the state of the ordering-flaw fix: it has been done since 11-11 (candidate 110201,
+red test, recovery), so there is nothing left to do there.
+
+**Pick up here (next session):**
+1. AS-REP roasting, starting the same way as Kerberoasting: fire it by hand and read the real 4768
+   before trusting rule 100211, which has never been live-verified.
+2. Still open from 11-11: rewrite `README.md` and `writeups/kerberoasting.md` (they still describe
+   `/logtest` and the old four-job pipeline); rename the copy task in `stage-candidate.yml`.
+3. Known limit to keep in mind for new techniques: a candidate is a child of the live rule, so it can
+   only fire if the live rule already fires.

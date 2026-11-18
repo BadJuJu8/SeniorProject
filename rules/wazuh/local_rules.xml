@@ -58,15 +58,11 @@
   <!-- AS-REP Roasting  —  T1558.004  —  sigma: asrep_roasting.yml    -->
   <!-- Windows Security 4768: a Kerberos TGT (AS-REQ) was requested   -->
   <!-- ============================================================= -->
-  <rule id="100210" level="0">
-    <decoded_as>windows_eventchannel</decoded_as>
-    <field name="win.system.eventID">^4768$</field>
-    <description>Kerberos authentication ticket (TGT) requested [4768]</description>
-    <options>no_full_log</options>
-  </rule>
 
+  
   <rule id="100211" level="12">
-    <if_sid>100210</if_sid>
+    <if_group>windows_security</if_group>
+    <field name="win.system.eventID">^4768$</field>
     <field name="win.eventdata.preAuthType" type="pcre2">^0$</field>
     <field name="win.eventdata.ticketEncryptionType" type="pcre2">^0x17$</field>
     <field name="win.eventdata.targetUserName" negate="yes" type="pcre2">(?i)^krbtgt$</field>
