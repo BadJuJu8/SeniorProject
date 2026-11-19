@@ -36,6 +36,24 @@
         ],
         "defender": "off"
       }
+    },
+    {
+      "technique": "dcsync",
+      "attack_id": "T1003.006",
+      "sample": "4662_dcsync.json",
+      "expected_rule_id": "100221",
+      "candidate_rule_id": "110221",
+      "event_id": "4662",
+      "sigma": "rules/sigma/dcsync.yml",
+      "wazuh": "rules/wazuh/local_rules.xml",
+      "writeup": "writeups/dcsync.md",
+      "atomic": {
+        "technique": "T1003.006",
+        "test_numbers": [
+          1
+        ],
+        "defender": "off"
+      }
     }
   ]
 }

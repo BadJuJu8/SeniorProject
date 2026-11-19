@@ -219,6 +219,12 @@ def test_preauth_required_not_asrep():
     assert not rule_matches("100211", ev)
 
 
+def test_dc_replication_not_dcsync():
+    ev = _load("4662_dcsync.json")
+    ev["win"]["eventdata"]["subjectUserName"] = "DC02$"  # legit DC-to-DC replication
+    assert not rule_matches("100221", ev)
+
+
 # --------------------------------------------------------------------------- #
 # Candidate (shadow deploy): ci/make_candidate.py                             #
 # --------------------------------------------------------------------------- #

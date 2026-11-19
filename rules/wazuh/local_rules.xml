@@ -81,7 +81,8 @@
   <rule id="100221" level="12">
     <if_group>windows_security</if_group>
     <field name="win.system.eventID">^4662$</field>
-    <!-- <field name="win.eventdata.properties" type="pcre2">1131f6aa-9c07-11d1-f79f-00c04fc2dcd2|1131f6ad-9c07-11d1-f79f-00c04fc2dcd2|89e95b76-444d-4c62-991a-0facbeda640c</field> -->
+    <!-- DS-Replication-Get-Changes / -All / -In-Filtered-Set; live 4662 from a Mimikatz dcsync showed -All ({1131f6ad...}) -->
+    <field name="win.eventdata.properties" type="pcre2">1131f6aa-9c07-11d1-f79f-00c04fc2dcd2|1131f6ad-9c07-11d1-f79f-00c04fc2dcd2|89e95b76-444d-4c62-991a-0facbeda640c</field>
     <field name="win.eventdata.subjectUserName" negate="yes" type="pcre2">\$$</field>
     <field name="win.eventdata.subjectUserName" negate="yes" type="pcre2">(?i)^MSOL_</field>
     <description>DCSync: AD replication rights exercised by non-DC account $(win.eventdata.subjectUserName)</description>
