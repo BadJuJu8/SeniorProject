@@ -78,17 +78,10 @@
   <!-- Windows Security 4662: replication rights exercised by a       -->
   <!-- non-machine account                                           -->
   <!-- ============================================================= -->
-  <rule id="100220" level="0">
-    <decoded_as>windows_eventchannel</decoded_as>
-    <field name="win.system.eventID">^4662$</field>
-    <description>Directory-service object operation [4662]</description>
-    <options>no_full_log</options>
-  </rule>
-
   <rule id="100221" level="12">
-    <if_sid>100220</if_sid>
-    <!-- DS-Replication-Get-Changes / -All / -In-Filtered-Set -->
-    <field name="win.eventdata.properties" type="pcre2">1131f6aa-9c07-11d1-f79f-00c04fc2dcd2|1131f6ad-9c07-11d1-f79f-00c04fc2dcd2|89e95b76-444d-4c62-991a-0facbeda640c</field>
+    <if_group>windows_security</if_group>
+    <field name="win.system.eventID">^4662$</field>
+    <!-- <field name="win.eventdata.properties" type="pcre2">1131f6aa-9c07-11d1-f79f-00c04fc2dcd2|1131f6ad-9c07-11d1-f79f-00c04fc2dcd2|89e95b76-444d-4c62-991a-0facbeda640c</field> -->
     <field name="win.eventdata.subjectUserName" negate="yes" type="pcre2">\$$</field>
     <field name="win.eventdata.subjectUserName" negate="yes" type="pcre2">(?i)^MSOL_</field>
     <description>DCSync: AD replication rights exercised by non-DC account $(win.eventdata.subjectUserName)</description>

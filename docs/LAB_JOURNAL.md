@@ -1133,3 +1133,37 @@ captured at 22:23 UTC.
 6. DCSync (100220/221) and PtH (100230/231) still have the parent/child shape; expect the same failure.
 7. Later: find what filled the VM disk; remove my PC's SSH key from the manager and `robert` from the
    `wazuh` group when today's work is finished.
+
+**2026-11-18 (close) - AS-REP roasting is green through the pipeline.**
+I chose `status ^0x0$` in place of the ticket-encryption line, so 100211 is: 4768 + `preAuthType 0` +
+`status 0x0`. Sigma rule changed to match.
+- Run #18 (push, commit `c4f7d81`): Kerberoasting pipeline fully green; candidate 110201 fired at
+  22:40:11 UTC; promote put the final `local_rules.xml` on the manager at 22:40. First time the AS-REP
+  Sigma file and the real 4768 sample went through `sigma check` and the offline tests in CI.
+- AS-REP run, started by hand in Gitea (Actions -> `detect.yml` -> Run workflow, technique
+  `asrep_roasting`). First attempt went RED at "Fire the live atomic": the manager shows the candidate
+  staged at 22:45:25 and discarded at 22:45:57, with no AS-REP alert in between, so the attack never
+  ran and the step failed within about 30 seconds. `discard-candidate` did its job. I re-ran all jobs:
+  staged 22:48:33, **candidate 110211 fired at 22:49:02** on `svc_legacy` from 10.20.0.101, promoted
+  22:49:27, no candidate file left behind.
+- The cause of the first failure is unknown. I had switched terminal tabs on IT-RGARCIA, away from the
+  runner's tab, but that should not stop a job; the step's log was replaced by the re-run. If it
+  happens again: save the red step's log before re-running.
+
+**Two techniques now go through the pipeline: Kerberoasting (100201) and AS-REP roasting (100211).**
+
+Still open: items 5-7 of the list above (write-up, header comment in `local_rules.xml`, DCSync/PtH
+structure, what filled the disk, access clean-up), plus two wordings that are now wrong: the rule
+description says "issued an RC4-HMAC TGT" though the rule no longer checks for RC4, and the Sigma
+`Status` line still carries the old RC4 comment.
+
+**2026-11-18 (DCSync start).** Rewrote 100221 as a single `if_group windows_security` rule on 4662
+(deleted the 100220 parent), properties-GUID line commented out for a first probe fire. Could not fire
+yet: Atomic T1003.006-1 needs Mimikatz, which Defender blocked (AMSI on the download cradle, not the
+file - folder ExclusionPath does not cover command-line/AMSI detections; realtime off needs Tamper
+Protection off first), and then the GitHub download timed out (ReadConsole / 120s - likely lab
+isolation on IT-RGARCIA, same as the Wazuh VM feed). Committed the probe to deploy via the next
+kerberoasting promote. Still to do: get Mimikatz onto IT-RGARCIA (or DCSync from a Linux box via
+Impacket secretsdump), confirm robert.garcia has Replicating Directory Changes/-All and DS-Access
+auditing is on, fire, read the real 4662 off the manager, then restore the properties condition to
+what the real event shows. Defender was turned off on IT-RGARCIA for the attempt - must be restored.
