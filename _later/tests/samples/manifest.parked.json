@@ -1,22 +1,4 @@
 {
-  "_comment": "Manifest cases parked during repo cleanup. Move a case back into tests/samples/manifest.json (and its files back out of _later/) when you take that technique on.",
-  "cases": [
-    {
-      "technique": "pass_the_hash",
-      "attack_id": "T1550.002",
-      "sample": "4624_pth.json",
-      "expected_rule_id": "100231",
-      "event_id": "4624",
-      "sigma": "rules/sigma/pass_the_hash.yml",
-      "wazuh": "rules/wazuh/local_rules.xml",
-      "writeup": "writeups/pass_the_hash.md",
-      "atomic": {
-        "technique": "T1550.002",
-        "test_numbers": [
-          1
-        ],
-        "defender": "off"
-      }
-    }
-  ]
+  "_comment": "Manifest cases parked during repo cleanup. Move a case back into tests/samples/manifest.json (and its files back out of _later/) when you take that technique on. Empty: all four planned techniques (kerberoasting, asrep_roasting, dcsync, pass_the_hash) are now live.",
+  "cases": []
 }

@@ -225,6 +225,22 @@ def test_dc_replication_not_dcsync():
     assert not rule_matches("100221", ev)
 
 
+def test_runas_netonly_not_pth():
+    """The real benign runas /netonly capture has the IDENTICAL type-9 + seclogo +
+    Negotiate signature as Mimikatz pth; only its assumed identity (targetOutbound
+    'pthcanary') is not privileged. It must NOT fire — this is the whole point of the
+    targetOutboundUserName discriminator (see writeups/pass_the_hash.md)."""
+    ev = _load("4624_runas_netonly.json")
+    assert not rule_matches("100231", ev)
+
+
+def test_network_logon_not_pth():
+    """An ordinary type-3 network logon is not a NewCredentials/PtH logon."""
+    ev = _load("4624_pth.json")
+    ev["win"]["eventdata"]["logonType"] = "3"
+    assert not rule_matches("100231", ev)
+
+
 # --------------------------------------------------------------------------- #
 # Candidate (shadow deploy): ci/make_candidate.py                             #
 # --------------------------------------------------------------------------- #

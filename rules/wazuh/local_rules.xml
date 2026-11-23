@@ -97,19 +97,14 @@
   <!-- Windows Security 4624: NewCredentials (type 9) logon via the   -->
   <!-- Secondary Logon service — the sekurlsa::pth signature          -->
   <!-- ============================================================= -->
-  <rule id="100230" level="0">
-    <decoded_as>windows_eventchannel</decoded_as>
-    <field name="win.system.eventID">^4624$</field>
-    <description>An account was successfully logged on [4624]</description>
-    <options>no_full_log</options>
-  </rule>
-
   <rule id="100231" level="12">
-    <if_sid>100230</if_sid>
+    <if_group>windows_security</if_group>
+    <field name="win.system.eventID">^4624$</field>
     <field name="win.eventdata.logonType" type="pcre2">^9$</field>
     <field name="win.eventdata.logonProcessName" type="pcre2">(?i)^seclogo$</field>
+    <field name="win.eventdata.targetOutboundUserName" type="pcre2">(?i)^administrator$</field>
     <field name="win.eventdata.authenticationPackageName" type="pcre2">(?i)^Negotiate$</field>
-    <description>Pass-the-Hash: NewCredentials logon (type 9) via Secondary Logon for $(win.eventdata.targetUserName)</description>
+    <description>Possible Pass-the-Hash: $(win.eventdata.subjectUserName) opened a NewCredentials logon assuming privileged identity $(win.eventdata.targetOutboundUserName)</description>
     <mitre>
       <id>T1550.002</id>
     </mitre>

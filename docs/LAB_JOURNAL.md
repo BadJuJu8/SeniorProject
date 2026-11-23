@@ -1169,3 +1169,52 @@ auditing is on, fire, read the real 4662 off the manager, then restore the prope
 what the real event shows. Defender was turned off on IT-RGARCIA for the attempt - must be restored.
 
 **2026-11-18 (DCSync live-verified + wired).** Fired Atomic T1003.006-1 (Mimikatz dcsync /user:krbtgt) after disabling Defender on IT-RGARCIA (AMSI blocked the download cradle; Tamper Protection off in the GUI first, then realtime off; fired before restoring, so Defender must be turned back on). The loose probe 100221 caught four 4662 at 00:22:06 UTC, subjectUserName robert.garcia. Real properties: %%7688 {1131f6ad-9c07-11d1-f79f-00c04fc2dcd2} {19195a5b-...} = DS-Replication-Get-Changes-All. Unlike the AS-REP 0x17, the held-back GUID regex DOES match the real event, so the properties line is restored. Wired into the pipeline like AS-REP (dcsync sigma/writeup out of _later, real 4662 sample, manifest candidate 110221, negative test). Offline checks pass; candidate builds. NEXT: push, kerberoast run promotes, dispatch pipeline technique dcsync. Still: restore Defender on IT-RGARCIA; fix writeups/dcsync.md (says actor lowpriv, was robert.garcia); PtH still parent/child; find what filled the disk; close access (key off manager, robert out of group wazuh).
+
+**2026-11-23 (final report planning).** Got the CSC/ITC 492 final report guidelines: 30-40 pages,
+double-spaced, Times New Roman 12, sections in order: cover, table of contents, introduction,
+background / literature review, methodology, system implementation, results / evaluation, conclusion
+and future work, references, glossary. Must follow the sample report on Canvas (not yet compared).
+Drafted a rough outline mapping repo material to those sections; no report file created yet.
+
+**2026-11-23 (Pass-the-Hash T1550.002, rule 100231).** Fourth and last planned technique. No probe
+rule needed this time: stock rule 60106 already logs every 4624 into alerts.json, so the cheap-capture
+path worked (archiving is off; manager healthy at 46% disk). IT-rgarcia is Wazuh agent 001 (10.20.0.101)
+and forwards the Security channel, but sent ZERO 4624 today — Audit Logon success was not enabled on the
+workstation (DCs get it via domain policy, workstations don't by default). Enabled it:
+`auditpol /set /subcategory:"Logon" /success:enable`.
+
+Captured two REAL type-9 events to compare. (1) Benign baseline via `runas /netonly /user:canarylab\pthcanary cmd`
+and (2) Mimikatz: Atomic T1550.002-1 (`sekurlsa::pth /user:Administrator`, Defender off; the atomic module
+first failed to load in the runas-administrator session until `Set-ExecutionPolicy -Scope Process Bypass`).
+
+KEY FINDING: on the source host, Mimikatz pth is INDISTINGUISHABLE from a legitimate `runas /netonly`.
+Both produce 4624 / logonType 9 / logonProcessName `seclogo` / authPackage `Negotiate` / processName
+svchost.exe. Field-by-field the only differences are the account values (attacker/context-supplied) and
+`elevatedToken` (%%1842 vs %%1843) — and that is circumstantial (the canary ran from an elevated prompt),
+not a reliable PtH tell. The old parked rule guessed exactly `seclogo`+`Negotiate`, which turns out to be
+the signature of benign runas, not something unique to Mimikatz.
+
+Chose Option 3 (risk-based narrowing): require `targetOutboundUserName` to be a privileged account
+(`(?i)^administrator$`), i.e. a NewCredentials logon ASSUMING a high-value identity. The Mimikatz event
+assumed `Administrator` (fires); the canary assumed `pthcanary` (does not). This gives a real TP sample
+AND a real FP sample, both captured today. Rewrote 100231 as a single `if_group windows_security` rule
+(dropped the 100230 parent) with the five fields + the targetOutbound discriminator; description now names
+the actor (subjectUserName) vs the assumed identity (targetOutboundUserName). First paste had `<if_groups>`
+(not a real tag) and omitted the discriminator — caught in review (the if_groups typo is a live-only bug;
+the offline model chains only via if_sid so it would not have caught it).
+
+Wired in: real TP sample tests/samples/4624_pth.json, real FP sample tests/samples/4624_runas_netonly.json,
+manifest case (candidate 110231), two negatives in test_offline.py (the real canary must not fire; a type-3
+logon must not fire). Un-parked sigma + writeup; emptied manifest.parked.json and deleted the parked negative
+test and the fabricated 4624 sample. All 38 offline tests pass; candidate builds.
+
+Documented limitation / future work: robust PtH detection belongs on the TARGET/DC side — the NTLM network
+auth that USES the hash (4624 type 3 with NtLmSsp, or 4776 on the DC). The atomic passes a fake hash, so no
+network auth fires and that path can't be verified with this test; Option 3 is the verifiable source-host
+approximation.
+
+NEXT: push; the push run re-greens kerberoasting; then dispatch pipeline technique `pass_the_hash` (Defender
+must stay OFF on IT-rgarcia for the pipeline's atomic fire). Still to do: user updates sigma (add
+TargetOutboundUserName condition; fix the description that wrongly claims runas doesn't produce this combo)
+and writeups/pass_the_hash.md (indistinguishability finding + Option 3 rationale + DC-side future work);
+restore Defender on IT-rgarcia; remove robert from wazuh group again at session end.
